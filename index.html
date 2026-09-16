@@ -78,6 +78,30 @@ input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--ink);height:26px}
 .hidden{display:none!important}
 .saved{font-size:12.5px;color:var(--go);display:flex;gap:6px;align-items:center}
 .restale{background:#fdf6e6;border:1px solid var(--hold);color:#7a5a05;padding:9px 11px;font-size:13px;margin-bottom:12px}
+
+/* 대상 선택 — 번호 버튼 줄 */
+.nav{position:sticky;top:0;z-index:5;background:var(--ground);margin:-16px -14px 14px;padding:12px 14px 10px;border-bottom:1px solid var(--line)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips.scrollx{flex-wrap:nowrap;overflow-x:auto;padding-bottom:5px;-webkit-overflow-scrolling:touch}
+.chip{width:42px;height:42px;padding:0;border:1px solid var(--line);background:#fff;color:var(--ink-2);
+  font-family:var(--mono);font-size:16px;font-weight:600;border-radius:2px;position:relative;
+  display:flex;align-items:center;justify-content:center;flex:none}
+.chip.ready{border-style:dashed;color:var(--ink-3);background:var(--panel-2)}
+.chip.open{border:2px solid var(--go);color:var(--go)}
+.chip.miss{border-color:var(--stop);color:var(--stop)}
+.chip.stale{border-color:var(--hold);color:var(--hold)}
+.chip.sent::after{content:"";position:absolute;left:2px;right:2px;bottom:2px;height:4px;background:var(--go)}
+.chip.sent.closedone::after{background:var(--ink-3)}
+.chip.sel{background:var(--ink);border-color:var(--ink);color:#fff}
+.chip.sel.open{background:var(--go);border-color:var(--go);color:#fff}
+.chip.sel::after{background:#fff!important}
+.chip:disabled{cursor:not-allowed}
+.navmeta{display:flex;align-items:baseline;gap:10px;margin-top:10px}
+.navmeta .nm{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.navmeta .cnt{margin-left:auto;font-family:var(--mono);font-size:12.5px;color:var(--ink-2);flex:none}
+.legend{margin-top:7px;font-size:11px;color:var(--ink-3);line-height:1.5}
+.legend b{font-weight:600;color:var(--go)}
+.legend s{text-decoration:none;color:var(--stop)}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;font-size:14px;border-radius:2px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:9}
 #toast.on{opacity:1}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -111,6 +135,7 @@ input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--ink);height:26px}
   </section>
 
   <!-- 채점 -->
+  <div id="nav" class="nav hidden"></div>
   <div id="board" class="hidden"></div>
 </div>
 <div id="toast"></div>
@@ -157,6 +182,7 @@ let CODE = null, S = null, LK = null;
 let ME = null, MYSC = {}, SENT = {};
 let D = { config:{}, criteria:{}, subjects:{} };
 let draft = {};
+let SEL = null;   // 지금 보고 있는 평가 대상
 
 if (FIXED) boot(FIXED);
 else db.ref('activeSession').on('value', s => {
@@ -192,7 +218,7 @@ function watchMe(){
 }
 function knockout(){
   [LK.me, LK.sc, LK.sent].forEach(k => localStorage.removeItem(k));
-  ME = null; MYSC = {}; SENT = {}; draft = {};
+  ME = null; MYSC = {}; SENT = {}; draft = {}; SEL = null;
   $('#kickNote').classList.remove('hidden');
   render();
   window.scrollTo(0,0);
@@ -230,9 +256,35 @@ $('#btnReset').onclick = () => {
 function showReg(){
   $('#reg').classList.remove('hidden');
   $('#board').classList.add('hidden');
+  $('#nav').classList.add('hidden');
   $('#btnReset').classList.add('hidden');
   $('#hMe').textContent = CODE ? '등록 전' : '연결 중';
 }
+/* 화면에는 한 번에 한 대상만 띄우고, 위쪽 번호 버튼으로 옮겨 다닙니다. */
+function editableOf(sv){
+  if (!sv) return false;
+  if (sv.state === 'open') return true;
+  if (sv.state === 'closed') return (D.config||{}).allowEditClosed !== false;
+  return false;
+}
+/* 저장하지 않은 수정이 남아 있는지 — 남아 있으면 자동 이동을 멈춥니다 */
+function dirty(sid, cri){
+  const d = draft[sid]; if (!d) return false;
+  const mine = MYSC[sid] || {};
+  return cri.some(([cid]) => d[cid] && d[cid].touched && num(mine[cid], -1) !== d[cid].v);
+}
+function pickDefault(subs, cri){
+  const open = subs.filter(([,v]) => v.state === 'open');
+  const openUnsent = open.filter(([id]) => !SENT[id] || needsResubmit(id, cri));
+  if (openUnsent.length) return openUnsent[0][0];
+  if (open.length) return open[open.length-1][0];
+  const missed = subs.filter(([id,v]) => v.state === 'closed' && !SENT[id]);
+  if (missed.length) return missed[0][0];
+  const closed = subs.filter(([,v]) => v.state === 'closed');
+  if (closed.length) return closed[closed.length-1][0];
+  return subs.length ? subs[0][0] : null;
+}
+
 function render(){
   $('#hTitle').textContent = (D.config||{}).title || '평가 채점';
   if (!ME) { showReg(); return; }
@@ -242,27 +294,59 @@ function render(){
   $('#board').classList.remove('hidden');
 
   const cri = criList(), subs = subList();
-  const allowEdit = (D.config||{}).allowEditClosed !== false;
+  const byId = {}; subs.forEach(([id,v]) => byId[id] = v);
 
   if (!cri.length || !subs.length) {
+    $('#nav').classList.add('hidden');
     $('#board').innerHTML = '<div class="panel"><div class="body"><div class="empty"><div class="big">아직 준비 중입니다</div>운영자가 평가 문항과 대상을 등록하면 여기에 나타납니다.</div></div></div>';
     return;
   }
   syncDraft(cri);
   const maxTotal = cri.reduce((s,[,v])=>s+num(v.max),0);
-  const openOnes = subs.filter(([,v]) => v.state === 'open');
-  const closedOnes = subs.filter(([,v]) => v.state === 'closed');
 
-  let h = '';
-  if (!openOnes.length && !closedOnes.length) {
-    h += '<div class="panel"><div class="body"><div class="empty"><div class="big">채점 대기 중</div>발표가 시작되면 운영자가 채점 칸을 열어 줍니다.<br>이 화면을 켜 둔 채로 기다려 주세요.</div></div></div>';
+  /* 선택 대상 정하기 — 보던 대상이 마감되고 새로 열린 게 있으면 따라갑니다 */
+  if (!SEL || !byId[SEL]) SEL = pickDefault(subs, cri);
+  else if (byId[SEL].state !== 'open' && !dirty(SEL, cri)) {
+    const open = subs.filter(([,v]) => v.state === 'open');
+    if (open.length) SEL = open[open.length-1][0];
   }
-  if (openOnes.length) h += openOnes.map(([sid,sv]) => card(sid, sv, cri, maxTotal, true)).join('');
-  if (closedOnes.length) {
-    h += '<div style="margin:22px 0 10px;font-size:12.5px;color:var(--ink-2);border-top:1px solid var(--line);padding-top:12px">마감된 대상 ' + (allowEdit ? '— 아직 수정할 수 있습니다' : '— 잠겨 있습니다') + '</div>';
-    h += closedOnes.map(([sid,sv]) => card(sid, sv, cri, maxTotal, allowEdit)).join('');
+
+  const sentCount = subs.filter(([id]) => SENT[id] && !needsResubmit(id, cri)).length;
+  const sv = byId[SEL] || {};
+  const idx = subs.findIndex(([id]) => id === SEL);
+
+  /* 번호 버튼 */
+  const chips = subs.map(([id,v], i) => {
+    const sent = !!SENT[id], stale = needsResubmit(id, cri);
+    const cls = ['chip'];
+    if (v.state === 'ready') cls.push('ready');
+    if (v.state === 'open') cls.push('open');
+    if (v.state === 'closed') { cls.push('closedone'); if (!sent) cls.push('miss'); }
+    if (stale) cls.push('stale');
+    if (sent && !stale) cls.push('sent');
+    if (id === SEL) cls.push('sel');
+    const label = (i+1) + '번 ' + (v.name || '') + ' · ' +
+      (v.state === 'ready' ? '아직 열리지 않음' : v.state === 'open' ? '채점 가능' : '마감') +
+      (stale ? ' · 재제출 필요' : sent ? ' · 제출 완료' : ' · 미제출');
+    return '<button class="' + cls.join(' ') + '" data-sid="' + id + '" aria-label="' + esc(label) + '"' +
+      (v.state === 'ready' ? ' disabled' : '') + '>' + (i+1) + '</button>';
+  }).join('');
+
+  $('#nav').classList.remove('hidden');
+  $('#nav').innerHTML = '<div class="chips' + (subs.length > 12 ? ' scrollx' : '') + '">' + chips + '</div>' +
+    '<div class="navmeta"><span class="nm">' + (idx >= 0 ? (idx+1) + '. ' : '') + esc(sv.name || '') + '</span>' +
+    '<span class="cnt">제출 ' + sentCount + ' / ' + subs.length + '</span></div>' +
+    '<div class="legend"><b>초록</b> 지금 채점 가능 · <b>아래 줄</b> 제출 완료 · <s>빨강</s> 마감됐는데 미제출 · 점선 아직 안 열림</div>';
+  $('#nav').querySelectorAll('.chip').forEach(b => b.onclick = () => {
+    SEL = b.dataset.sid; render(); window.scrollTo({ top: 0, behavior: 'auto' });
+  });
+
+  /* 선택된 대상 하나만 */
+  if (sv.state === 'ready') {
+    $('#board').innerHTML = '<div class="panel"><div class="body"><div class="empty"><div class="big">채점 대기 중</div>이 대상은 아직 열리지 않았습니다.<br>발표가 시작되면 운영자가 채점 칸을 열어 줍니다.</div></div></div>';
+    return;
   }
-  $('#board').innerHTML = h;
+  $('#board').innerHTML = card(SEL, sv, cri, maxTotal, editableOf(sv));
   wire(cri, maxTotal);
 }
 
@@ -377,6 +461,8 @@ function submit(sid, cri, sec){
     MYSC[sid] = v; SENT[sid] = true;
     lsSet(LK.sc, MYSC); lsSet(LK.sent, SENT);
     toast('제출되었습니다');
+    const rest = subList().find(([id,sv]) => sv.state === 'open' && id !== sid && (!SENT[id] || needsResubmit(id, cri)));
+    if (rest) { SEL = rest[0]; window.scrollTo({ top: 0, behavior: 'auto' }); }
     render();
   }).catch(err => {
     btn.disabled = false; btn.textContent = '제출';
