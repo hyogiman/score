@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>평가 운영 · admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#dde2e6; --panel:#ffffff; --panel-2:#f4f7f8;
+  --ink:#16212b; --ink-2:#4c5b66; --ink-3:#8494a0;
+  --line:#aeb9c1; --line-2:#d6dde1;
+  --go:#0a7361; --hold:#a8790a; --stop:#a8172c;
+  --sans:"IBM Plex Sans KR",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.55;-webkit-text-size-adjust:100%}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* 눈금 스케일 — 이 화면의 기준선 */
+.scale{height:24px;background:var(--ink);position:relative;flex:none}
+.scale::before{content:"";position:absolute;left:0;right:0;bottom:0;height:7px;
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,.45) 0 1px,transparent 1px 8px)}
+.scale::after{content:"";position:absolute;left:0;right:0;bottom:0;height:14px;
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,.9) 0 1.5px,transparent 1.5px 40px)}
+
+header{background:var(--ink);color:#e8eef1;padding:10px 18px;display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+header b{font-weight:600;font-size:15px;letter-spacing:.01em}
+header .sub{color:#9fb1bb;font-size:12px}
+header .right{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:12px;color:#9fb1bb}
+
+.wrap{max-width:1180px;margin:0 auto;padding:18px}
+.panel{background:var(--panel);border:1px solid var(--line);margin-bottom:16px}
+.panel>h2{margin:0;background:var(--ink);color:#eef3f6;font-size:12.5px;font-weight:600;padding:7px 12px;display:flex;gap:10px;align-items:center}
+.panel>h2 .note{margin-left:auto;font-weight:400;color:#9fb1bb}
+.panel .body{padding:14px}
+.panel .body>p.hint{margin:0 0 10px;color:var(--ink-2);font-size:12.5px}
+
+button{font:inherit;font-size:13px;border:1px solid var(--ink);background:var(--panel);color:var(--ink);padding:6px 12px;cursor:pointer;border-radius:2px}
+button:hover{background:var(--panel-2)}
+button.primary{background:var(--ink);color:#fff}
+button.primary:hover{background:#26343f}
+button.ghost{border-color:var(--line);color:var(--ink-2)}
+button.danger{border-color:var(--stop);color:var(--stop)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--go);outline-offset:2px}
+button:disabled{opacity:.4;cursor:not-allowed}
+input[type=text],input[type=number],input[type=password],input[type=email],select{font:inherit;font-size:13px;border:1px solid var(--line);background:#fff;padding:6px 8px;border-radius:2px;color:var(--ink)}
+input[type=number]{font-family:var(--mono);text-align:right}
+label.chk{display:inline-flex;gap:7px;align-items:center;cursor:pointer}
+
+nav.tabs{display:flex;gap:0;border-bottom:2px solid var(--ink);margin-bottom:16px;overflow-x:auto}
+nav.tabs button{border:1px solid var(--line);border-bottom:none;border-radius:0;margin-right:-1px;background:var(--panel-2);color:var(--ink-2);padding:8px 16px;white-space:nowrap}
+nav.tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border:1px solid var(--line-2);padding:6px 8px;text-align:left;vertical-align:middle}
+th{background:var(--panel-2);font-weight:600;font-size:12px;color:var(--ink-2)}
+td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+tr.dim td{color:var(--ink-3)}
+
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.stack{display:flex;flex-direction:column;gap:12px}
+.fieldrow{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center;padding:7px 0;border-bottom:1px dotted var(--line-2)}
+.fieldrow:last-child{border-bottom:none}
+.fieldrow>span:first-child{color:var(--ink-2);font-size:13px}
+
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:2px;overflow:hidden}
+.seg button{border:none;border-right:1px solid var(--line);border-radius:0;padding:5px 11px;font-size:12px;background:#fff;color:var(--ink-3)}
+.seg button:last-child{border-right:none}
+.seg button.on[data-st=ready]{background:var(--ink-3);color:#fff}
+.seg button.on[data-st=open]{background:var(--go);color:#fff}
+.seg button.on[data-st=closed]{background:var(--ink);color:#fff}
+
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%;border:1px solid var(--line)}
+.dot.f{background:var(--go);border-color:var(--go)}
+.matrix td.cell{text-align:center;padding:4px;font-family:var(--mono);font-size:12px}
+.matrix td.cell.miss{background:#fbeef0;color:var(--stop)}
+.matrix th.vert{font-size:11px;line-height:1.2;min-width:54px;max-width:70px;word-break:keep-all}
+
+.bar{height:9px;background:var(--panel-2);border:1px solid var(--line-2);position:relative}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--ink);display:block}
+
+.banner{padding:10px 14px;border:1px solid var(--stop);background:#fbeef0;color:var(--stop);margin-bottom:14px;font-size:13px}
+.banner.ok{border-color:var(--go);background:#eaf4f1;color:var(--go)}
+.banner.warn{border-color:var(--hold);background:#fdf6e6;color:#7a5a05}
+.hidden{display:none!important}
+.linkbox{font-family:var(--mono);font-size:12px;background:var(--panel-2);border:1px solid var(--line-2);padding:6px 8px;word-break:break-all}
+.pill{display:inline-block;font-size:11px;padding:2px 7px;border:1px solid var(--line);border-radius:2px;color:var(--ink-2);background:#fff}
+.pill.go{border-color:var(--go);color:var(--go)}
+.pill.stop{border-color:var(--stop);color:var(--stop)}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;font-size:13px;border-radius:2px;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@media (max-width:700px){.fieldrow{grid-template-columns:1fr}.wrap{padding:12px}}
+</style>
+</head>
+<body>
+<div class="scale"></div>
+<header>
+  <b>평가 운영</b>
+  <span class="sub">admin</span>
+  <span class="right">
+    <span id="conn">연결 확인 중</span>
+    <span id="who"></span>
+    <button id="btnOut" class="ghost hidden" style="border-color:#5b6b76;color:#cfdae0;background:transparent">로그아웃</button>
+  </span>
+</header>
+
+<div class="wrap">
+  <div id="dbWarn" class="banner hidden"></div>
+
+  <!-- 로그인 -->
+  <section id="loginPanel" class="panel">
+    <h2>관리자 로그인</h2>
+    <div class="body">
+      <p class="hint">심사위원 명단과 개별 점수는 로그인한 관리자만 읽을 수 있습니다. Firebase 콘솔에서 만든 관리자 계정으로 로그인하세요.</p>
+      <div class="row">
+        <input type="email" id="email" placeholder="관리자 이메일" style="width:220px" autocomplete="username">
+        <input type="password" id="pw" placeholder="비밀번호" style="width:170px" autocomplete="current-password">
+        <button class="primary" id="btnIn">로그인</button>
+      </div>
+      <div id="loginErr" class="banner hidden" style="margin:12px 0 0"></div>
+    </div>
+  </section>
+
+  <div id="main" class="hidden">
+    <!-- 세션 -->
+    <section class="panel">
+      <h2>세션<span class="note" id="sessNote"></span></h2>
+      <div class="body">
+        <div class="row">
+          <span style="color:var(--ink-2)">세션 코드</span>
+          <input type="text" id="codeInput" style="width:150px;font-family:var(--mono)">
+          <button id="btnOpenSess" class="primary">열기</button>
+          <button id="btnNewSess" class="ghost">새 세션 만들기</button>
+          <select id="sessList" style="min-width:180px"><option value="">— 지난 세션 —</option></select>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <div style="flex:1;min-width:260px">
+            <div style="font-size:12px;color:var(--ink-2);margin-bottom:4px">심사위원용 주소</div>
+            <div class="linkbox" id="linkIndex">—</div>
+          </div>
+          <div style="flex:1;min-width:260px">
+            <div style="font-size:12px;color:var(--ink-2);margin-bottom:4px">공개 화면 주소</div>
+            <div class="linkbox" id="linkScreen">—</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <nav class="tabs">
+      <button data-tab="set" class="on">설정</button>
+      <button data-tab="cri">평가 문항</button>
+      <button data-tab="sub">평가 대상</button>
+      <button data-tab="sta">제출 현황</button>
+      <button data-tab="res">집계 결과</button>
+      <button data-tab="scr">공개 화면 제어</button>
+    </nav>
+
+    <div id="tab-set" class="tabpane">
+      <section class="panel">
+        <h2>세션 설정</h2>
+        <div class="body">
+          <div class="fieldrow"><span>평가 제목</span><div><input type="text" id="cTitle" style="width:100%;max-width:420px" placeholder="예: 2026 상반기 개선과제 발표 심사"></div></div>
+          <div class="fieldrow"><span>산출 방식</span><div>
+            <label class="chk"><input type="radio" name="mode" value="simple"> 단순평균</label>
+            <label class="chk" style="margin-left:16px"><input type="radio" name="mode" value="trimmed"> 절사평균 (최고·최저 각 1개 제외)</label>
+            <div style="font-size:12px;color:var(--ink-2);margin-top:5px">절사평균은 해당 대상의 제출이 4명 이상일 때만 적용되고, 그 미만이면 자동으로 단순평균으로 계산합니다. 심사위원 7명 이상일 때 권장합니다.</div>
+          </div></div>
+          <div class="fieldrow"><span>마감된 대상 수정</span><div>
+            <label class="chk"><input type="checkbox" id="cEdit"> 마감된 대상도 심사위원이 점수를 고칠 수 있게 허용</label>
+            <div style="font-size:12px;color:var(--ink-2);margin-top:5px">켜 두면 3팀 발표 중에 1·2팀 점수를 수정할 수 있습니다. 결과 공개 직전에 꺼서 잠그세요.</div>
+          </div></div>
+          <div class="fieldrow"><span>심사위원 수</span><div class="row">
+            <span class="num" id="raterN" style="font-size:18px">0</span>
+            <span style="color:var(--ink-2);font-size:12px">명 등록됨 — 공개 화면의 제출 진행률 분모로 쓰입니다</span>
+          </div></div>
+        </div>
+      </section>
+    </div>
+
+    <div id="tab-cri" class="tabpane hidden">
+      <section class="panel">
+        <h2>평가 문항<span class="note" id="criSum"></span></h2>
+        <div class="body">
+          <p class="hint">문항명과 배점(만점)을 정합니다. 심사위원 화면에는 문항별 게이지가 순서대로 나타납니다. 값은 칸을 벗어날 때 저장됩니다.</p>
+          <table id="criTable"><tbody></tbody></table>
+          <div class="row" style="margin-top:12px">
+            <button id="btnAddCri" class="primary">문항 추가</button>
+            <button id="btnPreset" class="ghost">기본 4문항 넣기</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="tab-sub" class="tabpane hidden">
+      <section class="panel">
+        <h2>평가 대상<span class="note" id="subSum"></span></h2>
+        <div class="body">
+          <div class="row" style="margin-bottom:12px">
+            <span style="color:var(--ink-2)">평가 건수</span>
+            <input type="number" id="bulkN" value="8" min="1" max="60" style="width:70px">
+            <button id="btnBulk" class="primary">건 만들기</button>
+            <span style="color:var(--ink-3);font-size:12px">기존 목록 뒤에 이어서 생성합니다</span>
+            <span style="margin-left:auto"></span>
+            <button id="btnAllOpen" class="ghost">전체 열기</button>
+            <button id="btnAllClose" class="ghost">전체 마감</button>
+          </div>
+          <table id="subTable"><tbody></tbody></table>
+        </div>
+      </section>
+    </div>
+
+    <div id="tab-sta" class="tabpane hidden">
+      <section class="panel">
+        <h2>제출 현황<span class="note">행 = 평가 대상, 열 = 심사위원</span></h2>
+        <div class="body" style="overflow-x:auto">
+          <div id="matrix"></div>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>심사위원 명단</h2>
+        <div class="body" style="overflow-x:auto">
+          <table id="raterTable"><tbody></tbody></table>
+        </div>
+      </section>
+    </div>
+
+    <div id="tab-res" class="tabpane hidden">
+      <section class="panel">
+        <h2>집계 결과<span class="note" id="resNote"></span></h2>
+        <div class="body" style="overflow-x:auto">
+          <div id="resWrap"></div>
+          <div class="row" style="margin-top:14px">
+            <button id="btnCsv" class="primary">원본 점수 내려받기 (CSV)</button>
+            <span style="color:var(--ink-2);font-size:12px">심사위원별 문항 점수까지 포함된 파일입니다. 외부 공유에 주의하세요.</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="tab-scr" class="tabpane hidden">
+      <section class="panel">
+        <h2>공개 화면 제어</h2>
+        <div class="body">
+          <div class="banner warn" style="margin-bottom:14px">앞 팀 점수를 중간에 띄우면 뒤 팀 심사에 기준점으로 작용합니다. 전 대상 채점이 끝난 뒤 공개하는 편을 권합니다.</div>
+          <div class="fieldrow"><span>현재 상태</span><div class="num" id="scrState" style="font-size:15px">—</div></div>
+          <div class="fieldrow"><span>대상 선택</span><div><select id="scrPick" style="min-width:220px"></select></div></div>
+          <div class="fieldrow"><span>화면 전환</span><div class="row">
+            <button data-scr="idle" class="ghost">대기 화면</button>
+            <button data-scr="progress" class="ghost">제출 진행률</button>
+            <button data-scr="reveal" class="primary">점수 공개</button>
+            <button data-scr="rank" class="primary">전체 순위</button>
+          </div></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   1) Firebase 설정 — 세 파일(admin / index / screen) 모두 동일하게 맞추세요.
+      DATABASE_URL 은 Firebase 콘솔 > Realtime Database 화면 맨 위에 보이는 주소입니다.
+      미국에서 만들었다면      https://score-ee66c-default-rtdb.firebaseio.com
+      싱가포르에서 만들었다면  https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app
+   ═══════════════════════════════════════════════════════════════ */
+const DATABASE_URL = "https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCXGmsExbOCnvxDZpXcL1A10FlKeGZjjUI",
+  authDomain: "score-ee66c.firebaseapp.com",
+  projectId: "score-ee66c",
+  storageBucket: "score-ee66c.firebasestorage.app",
+  messagingSenderId: "133802236314",
+  appId: "1:133802236314:web:e75ae03d56f2c0ee058223",
+  databaseURL: DATABASE_URL
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.database();
+
+/* ── 상태 ───────────────────────────────────────────────── */
+let CODE = localStorage.getItem('sc.code') || 'main';
+let S = null, refs = [];
+let D = { config:{}, criteria:{}, subjects:{}, raters:{}, scores:{}, screen:{} };
+let authed = false, aggTimer = null;
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v,d=0) => { const n = Number(v); return isFinite(n) ? n : d; };
+function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),1800); }
+
+/* ── 연결 확인 ──────────────────────────────────────────── */
+let everConnected = false;
+db.ref('.info/connected').on('value', s => {
+  const c = s.val() === true;
+  if (c) everConnected = true;
+  $('#conn').textContent = c ? '연결됨' : (everConnected ? '연결 끊김' : '연결 시도 중');
+  $('#conn').style.color = c ? '#7fd0bf' : '#e8a0a8';
+});
+setTimeout(() => {
+  if (!everConnected) {
+    $('#dbWarn').classList.remove('hidden');
+    $('#dbWarn').innerHTML = '데이터베이스에 연결되지 않았습니다. 파일 맨 위 <b>DATABASE_URL</b> 값이 Firebase 콘솔의 Realtime Database 주소와 같은지 확인하세요. 세 파일 모두 같은 값이어야 합니다.';
+  }
+}, 6000);
+
+/* ── 로그인 ─────────────────────────────────────────────── */
+$('#btnIn').onclick = () => {
+  const e = $('#email').value.trim(), p = $('#pw').value;
+  if (!e || !p) return;
+  $('#loginErr').classList.add('hidden');
+  auth.signInWithEmailAndPassword(e, p).catch(err => {
+    const b = $('#loginErr'); b.classList.remove('hidden');
+    b.textContent = err.code === 'auth/operation-not-allowed'
+      ? 'Firebase 콘솔에서 Authentication > 로그인 방법 > 이메일/비밀번호를 먼저 사용 설정하세요.'
+      : '로그인하지 못했습니다. (' + err.code + ')';
+  });
+};
+$('#pw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnIn').click(); });
+$('#btnOut').onclick = () => auth.signOut();
+
+auth.onAuthStateChanged(u => {
+  authed = !!u;
+  $('#loginPanel').classList.toggle('hidden', authed);
+  $('#main').classList.toggle('hidden', !authed);
+  $('#btnOut').classList.toggle('hidden', !authed);
+  $('#who').textContent = u ? u.email : '';
+  if (authed) { $('#codeInput').value = CODE; openSession(CODE); loadSessionList(); }
+  else detach();
+});
+
+/* ── 세션 열기 ──────────────────────────────────────────── */
+function detach(){ refs.forEach(([r,ev,cb]) => r.off(ev,cb)); refs = []; }
+function bind(path, cb){
+  const r = S.child(path);
+  const h = r.on('value', snap => { D[path] = snap.val() || {}; cb(); });
+  refs.push([r,'value',h]);
+}
+function openSession(code){
+  detach();
+  CODE = (code||'main').trim().replace(/[.#$\[\]\/\s]/g,'') || 'main';
+  localStorage.setItem('sc.code', CODE);
+  $('#codeInput').value = CODE;
+  S = db.ref('sessions/' + CODE);
+  D = { config:{}, criteria:{}, subjects:{}, raters:{}, scores:{}, screen:{} };
+  const base = location.href.replace(/[^\/]*$/, '');
+  $('#linkIndex').textContent = base + 'index.html?s=' + CODE;
+  $('#linkScreen').textContent = base + 'screen.html?s=' + CODE;
+  $('#sessNote').textContent = '현재 세션: ' + CODE;
+
+  bind('config',   () => { renderSetup(); renderScreenCtl(); schedule(); });
+  bind('criteria', () => { renderCriteria(); renderResults(); schedule(); });
+  bind('subjects', () => { renderSubjects(); renderMatrix(); renderResults(); renderScreenCtl(); schedule(); });
+  bind('raters',   () => { renderRaters(); renderMatrix(); syncRaterCount(); });
+  bind('scores',   () => { renderMatrix(); renderResults(); schedule(); });
+  bind('screen',   () => renderScreenCtl());
+}
+$('#btnOpenSess').onclick = () => openSession($('#codeInput').value);
+$('#sessList').onchange = e => { if (e.target.value) openSession(e.target.value); };
+$('#btnNewSess').onclick = () => {
+  const d = new Date(), p = n => String(n).padStart(2,'0');
+  const code = `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}`;
+  const c = prompt('새 세션 코드를 입력하세요. 짧고 기억하기 쉬운 값이 좋습니다.', code);
+  if (!c) return;
+  const clean = c.trim().replace(/[.#$\[\]\/\s]/g,'');
+  db.ref('sessions/'+clean+'/config').update({ title:'', mode:'simple', allowEditClosed:true, createdAt: Date.now() });
+  db.ref('sessionIndex/'+clean).set({ title:'', createdAt: Date.now() });
+  openSession(clean); loadSessionList();
+};
+function loadSessionList(){
+  db.ref('sessionIndex').once('value').then(s => {
+    const v = s.val() || {}, sel = $('#sessList');
+    sel.innerHTML = '<option value="">— 지난 세션 —</option>';
+    Object.keys(v).sort().reverse().forEach(k => {
+      const o = document.createElement('option');
+      o.value = k; o.textContent = k + (v[k] && v[k].title ? ' · ' + v[k].title : '');
+      sel.appendChild(o);
+    });
+  }).catch(()=>{});
+}
+
+/* ── 탭 ─────────────────────────────────────────────────── */
+$$('nav.tabs button').forEach(b => b.onclick = () => {
+  $$('nav.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  $$('.tabpane').forEach(p => p.classList.add('hidden'));
+  $('#tab-' + b.dataset.tab).classList.remove('hidden');
+});
+
+/* ── 설정 ───────────────────────────────────────────────── */
+let setupSig = '';
+function renderSetup(){
+  const c = D.config || {};
+  if ($('#cTitle') !== document.activeElement) $('#cTitle').value = c.title || '';
+  const m = c.mode === 'trimmed' ? 'trimmed' : 'simple';
+  $$('input[name=mode]').forEach(r => r.checked = (r.value === m));
+  $('#cEdit').checked = c.allowEditClosed !== false;
+}
+$('#cTitle').onchange = e => {
+  S.child('config/title').set(e.target.value.trim());
+  db.ref('sessionIndex/'+CODE).update({ title: e.target.value.trim(), createdAt: D.config.createdAt || Date.now() });
+  loadSessionList();
+};
+$$('input[name=mode]').forEach(r => r.onchange = () => { if (r.checked) S.child('config/mode').set(r.value); });
+$('#cEdit').onchange = e => S.child('config/allowEditClosed').set(e.target.checked);
+function syncRaterCount(){
+  const n = Object.keys(D.raters || {}).length;
+  $('#raterN').textContent = n;
+  S.child('stats/raterCount').set(n).catch(()=>{});
+}
+
+/* ── 평가 문항 ──────────────────────────────────────────── */
+const sig = o => Object.keys(o||{}).sort().join(',');
+let criSig = '';
+function criList(){ return Object.entries(D.criteria||{}).sort((a,b)=>num(a[1].order)-num(b[1].order)); }
+function renderCriteria(){
+  const list = criList();
+  $('#criSum').textContent = list.length ? `${list.length}개 문항 · 총 배점 ${list.reduce((s,[,v])=>s+num(v.max),0)}점` : '문항이 없습니다';
+  const s = sig(D.criteria);
+  if (s === criSig) return;
+  criSig = s;
+  const tb = $('#criTable').querySelector('tbody');
+  tb.innerHTML = '<tr><th style="width:38px">순서</th><th>문항명</th><th>설명 (심사위원 화면에 표시)</th><th class="n" style="width:90px">배점</th><th style="width:60px"></th></tr>' +
+    (list.length ? list.map(([k,v],i)=>`<tr data-k="${k}">
+      <td class="n">${i+1}</td>
+      <td><input type="text" data-f="label" value="${esc(v.label)}" style="width:100%"></td>
+      <td><input type="text" data-f="desc" value="${esc(v.desc||'')}" style="width:100%" placeholder="예: 문제 정의가 구체적인가"></td>
+      <td class="n"><input type="number" data-f="max" value="${num(v.max,25)}" min="1" max="100" style="width:70px"></td>
+      <td><button class="danger" data-del="1">삭제</button></td></tr>`).join('')
+     : '<tr><td colspan="5" style="color:var(--ink-3)">문항을 추가하면 심사위원 화면에 게이지가 만들어집니다.</td></tr>');
+
+  tb.querySelectorAll('input').forEach(inp => inp.onchange = e => {
+    const k = e.target.closest('tr').dataset.k, f = e.target.dataset.f;
+    let val = f === 'max' ? Math.max(1, Math.round(num(e.target.value, 25))) : e.target.value.trim();
+    if (f === 'max') e.target.value = val;
+    S.child('criteria/' + k + '/' + f).set(val);
+  });
+  tb.querySelectorAll('button[data-del]').forEach(b => b.onclick = e => {
+    const k = e.target.closest('tr').dataset.k;
+    if (!confirm('이 문항을 삭제합니다. 이미 입력된 해당 문항 점수는 집계에서 빠집니다.')) return;
+    criSig = ''; S.child('criteria/' + k).remove();
+  });
+}
+$('#btnAddCri').onclick = () => {
+  const n = criList().length;
+  criSig = '';
+  S.child('criteria').push({ label: '문항 ' + (n+1), desc: '', max: 25, order: n + 1 });
+};
+$('#btnPreset').onclick = () => {
+  if (criList().length && !confirm('기존 문항 뒤에 4개를 더 추가합니다. 계속할까요?')) return;
+  const base = criList().length;
+  const P = [
+    ['문제 정의','해결하려는 문제가 구체적이고 근거가 있는가'],
+    ['해결 방안','접근이 타당하고 대안 검토가 충분한가'],
+    ['실행 가능성','현장에 적용할 수 있고 자원 계획이 현실적인가'],
+    ['전달력','핵심이 분명하고 시간 안에 설득력 있게 전달했는가']
+  ];
+  criSig = '';
+  P.forEach(([l,d],i) => S.child('criteria').push({ label:l, desc:d, max:25, order: base+i+1 }));
+};
+
+/* ── 평가 대상 ──────────────────────────────────────────── */
+let subSig = '';
+function subList(){ return Object.entries(D.subjects||{}).sort((a,b)=>num(a[1].order)-num(b[1].order)); }
+const STL = { ready:'대기', open:'열림', closed:'마감' };
+function renderSubjects(){
+  const list = subList();
+  const open = list.filter(([,v]) => v.state === 'open').length;
+  $('#subSum').textContent = list.length ? `${list.length}건 · 열림 ${open}건` : '대상이 없습니다';
+  const s = sig(D.subjects);
+  if (s !== subSig) {
+    subSig = s;
+    const tb = $('#subTable').querySelector('tbody');
+    tb.innerHTML = '<tr><th style="width:44px">번호</th><th>대상명</th><th>메모</th><th style="width:190px">상태</th><th style="width:60px"></th></tr>' +
+      (list.length ? list.map(([k,v],i)=>`<tr data-k="${k}">
+        <td class="n">${i+1}</td>
+        <td><input type="text" data-f="name" value="${esc(v.name)}" style="width:100%"></td>
+        <td><input type="text" data-f="desc" value="${esc(v.desc||'')}" style="width:100%" placeholder="발표자 / 과제명"></td>
+        <td><div class="seg">${['ready','open','closed'].map(st=>`<button data-st="${st}" class="${v.state===st?'on':''}">${STL[st]}</button>`).join('')}</div></td>
+        <td><button class="danger" data-del="1">삭제</button></td></tr>`).join('')
+       : '<tr><td colspan="5" style="color:var(--ink-3)">평가 건수를 입력하고 만들기를 누르세요.</td></tr>');
+
+    tb.querySelectorAll('input').forEach(inp => inp.onchange = e => {
+      const k = e.target.closest('tr').dataset.k;
+      S.child('subjects/' + k + '/' + e.target.dataset.f).set(e.target.value.trim());
+    });
+    tb.querySelectorAll('.seg button').forEach(b => b.onclick = e => {
+      const k = e.target.closest('tr').dataset.k;
+      S.child('subjects/' + k + '/state').set(e.target.dataset.st);
+    });
+    tb.querySelectorAll('button[data-del]').forEach(b => b.onclick = e => {
+      const k = e.target.closest('tr').dataset.k;
+      if (!confirm('이 대상과 해당 점수를 모두 삭제합니다.')) return;
+      subSig = '';
+      S.child('subjects/' + k).remove();
+      S.child('scores/' + k).remove();
+      S.child('aggregate/' + k).remove();
+    });
+  } else {
+    subList().forEach(([k,v]) => {
+      const tr = $(`#subTable tr[data-k="${k}"]`); if (!tr) return;
+      tr.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.st === v.state));
+    });
+  }
+}
+$('#btnBulk').onclick = () => {
+  const n = Math.max(1, Math.min(60, Math.round(num($('#bulkN').value, 8))));
+  const base = subList().length;
+  subSig = '';
+  for (let i = 0; i < n; i++) S.child('subjects').push({ name: (base+i+1) + '팀', desc:'', state:'ready', order: base+i+1 });
+  toast(n + '건을 만들었습니다');
+};
+$('#btnAllOpen').onclick = () => { if (confirm('모든 대상을 동시에 엽니다. 순차 진행이 아니라 일괄 채점 방식이 됩니다.')) subList().forEach(([k]) => S.child('subjects/'+k+'/state').set('open')); };
+$('#btnAllClose').onclick = () => { if (confirm('모든 대상을 마감합니다.')) subList().forEach(([k]) => S.child('subjects/'+k+'/state').set('closed')); };
+
+/* ── 제출 현황 ──────────────────────────────────────────── */
+function raterList(){ return Object.entries(D.raters||{}).sort((a,b)=>num(a[1].at)-num(b[1].at)); }
+function renderMatrix(){
+  const subs = subList(), rats = raterList();
+  if (!subs.length || !rats.length) {
+    $('#matrix').innerHTML = '<p style="color:var(--ink-3);margin:0">' + (!subs.length ? '평가 대상을 먼저 만드세요.' : '아직 등록한 심사위원이 없습니다.') + '</p>';
+    return;
+  }
+  const maxTotal = criList().reduce((s,[,v])=>s+num(v.max),0);
+  let h = '<table class="matrix"><tbody><tr><th style="min-width:110px">대상</th>';
+  rats.forEach(([,v]) => h += `<th class="vert">${esc(v.name)}</th>`);
+  h += '<th class="n" style="width:66px">제출</th></tr>';
+  subs.forEach(([sid,sv]) => {
+    const sc = (D.scores||{})[sid] || {};
+    const n = rats.filter(([rid]) => sc[rid]).length;
+    h += `<tr><td>${esc(sv.name)} <span class="pill ${sv.state==='open'?'go':''}">${STL[sv.state]||'대기'}</span></td>`;
+    rats.forEach(([rid]) => {
+      const v = sc[rid];
+      h += v ? `<td class="cell">${num(v.total)}</td>` : `<td class="cell miss">·</td>`;
+    });
+    h += `<td class="n">${n}/${rats.length}</td></tr>`;
+  });
+  h += '</tbody></table>';
+  if (maxTotal) h += `<p style="color:var(--ink-2);font-size:12px;margin:10px 0 0">칸의 숫자는 그 심사위원의 총점입니다 (만점 ${maxTotal}점). 빈칸은 미제출입니다.</p>`;
+  $('#matrix').innerHTML = h;
+}
+function renderRaters(){
+  const rats = raterList();
+  const tb = $('#raterTable').querySelector('tbody');
+  if (!rats.length) { tb.innerHTML = '<tr><td style="color:var(--ink-3)">아직 등록한 심사위원이 없습니다.</td></tr>'; return; }
+  const totalSubs = subList().length;
+  tb.innerHTML = '<tr><th style="width:36px">#</th><th>성명</th><th>사번</th><th>소속</th><th>직위</th><th class="n" style="width:80px">제출</th><th style="width:60px"></th></tr>' +
+    rats.map(([rid,v],i) => {
+      const done = subList().filter(([sid]) => ((D.scores||{})[sid]||{})[rid]).length;
+      return `<tr data-rid="${rid}" class="${done?'':'dim'}">
+        <td class="n">${i+1}</td><td>${esc(v.name)}</td><td class="n">${esc(v.empno||'')}</td>
+        <td>${esc(v.dept||'')}</td><td>${esc(v.position||'')}</td>
+        <td class="n">${done}/${totalSubs}</td>
+        <td><button class="danger" data-del="1">삭제</button></td></tr>`;
+    }).join('');
+  tb.querySelectorAll('button[data-del]').forEach(b => b.onclick = e => {
+    const rid = e.target.closest('tr').dataset.rid;
+    if (!confirm('이 심사위원과 제출한 점수를 모두 삭제합니다.')) return;
+    S.child('raters/' + rid).remove();
+    subList().forEach(([sid]) => S.child('scores/' + sid + '/' + rid).remove());
+  });
+}
+
+/* ── 집계 ───────────────────────────────────────────────── */
+function mean(a){ return a.length ? a.reduce((x,y)=>x+y,0) / a.length : 0; }
+function r2(n){ return Math.round(n * 100) / 100; }
+function computeAll(){
+  const cri = criList(), subs = subList();
+  const maxTotal = cri.reduce((s,[,v])=>s+num(v.max),0);
+  const trimmed = (D.config||{}).mode === 'trimmed';
+  const out = {};
+  subs.forEach(([sid]) => {
+    const sc = (D.scores||{})[sid] || {};
+    let rows = Object.entries(sc).map(([rid,v]) => ({ rid, total: num(v.total), v: v.v || {} }));
+    const n = rows.length;
+    let used = rows, applied = false;
+    if (trimmed && n >= 4) {
+      const sorted = rows.slice().sort((a,b)=>a.total-b.total);
+      used = sorted.slice(1, sorted.length - 1);
+      applied = true;
+    }
+    const byCriteria = {};
+    cri.forEach(([cid]) => byCriteria[cid] = r2(mean(used.map(r => num(r.v[cid])))));
+    out[sid] = {
+      avg: r2(mean(used.map(r => r.total))),
+      n, used: used.length, trimmed: applied,
+      maxTotal, byCriteria, updatedAt: Date.now()
+    };
+  });
+  return out;
+}
+function schedule(){ if (!authed || !S) return; clearTimeout(aggTimer); aggTimer = setTimeout(pushAgg, 350); }
+function pushAgg(){
+  const agg = computeAll();
+  S.child('aggregate').set(agg).catch(e => console.warn('집계 저장 실패', e));
+}
+function renderResults(){
+  const cri = criList(), subs = subList();
+  if (!subs.length || !cri.length) { $('#resWrap').innerHTML = '<p style="color:var(--ink-3);margin:0">문항과 대상을 먼저 설정하세요.</p>'; return; }
+  const agg = computeAll();
+  const maxTotal = cri.reduce((s,[,v])=>s+num(v.max),0);
+  const trimmed = (D.config||{}).mode === 'trimmed';
+  $('#resNote').textContent = (trimmed ? '절사평균' : '단순평균') + ' · 만점 ' + maxTotal + '점';
+  const ranked = subs.slice().sort((a,b) => (agg[b[0]].avg) - (agg[a[0]].avg));
+  let h = '<table><tbody><tr><th style="width:44px">순위</th><th>대상</th><th class="n" style="width:78px">평균</th><th style="width:150px">환산</th><th class="n" style="width:70px">제출</th>' +
+    cri.map(([,v]) => `<th class="n">${esc(v.label)}<br><span style="font-weight:400;color:var(--ink-3)">/${num(v.max)}</span></th>`).join('') + '</tr>';
+  ranked.forEach(([sid,sv], i) => {
+    const a = agg[sid], pct = maxTotal ? (a.avg / maxTotal * 100) : 0;
+    h += `<tr><td class="n">${a.n ? i+1 : '—'}</td>
+      <td>${esc(sv.name)}${a.trimmed?' <span class="pill">절사</span>':''}</td>
+      <td class="n" style="font-size:15px;font-weight:600">${a.n ? a.avg.toFixed(2) : '—'}</td>
+      <td><div class="bar"><i style="width:${Math.max(0,Math.min(100,pct))}%"></i></div></td>
+      <td class="n">${a.n}명</td>` +
+      cri.map(([cid]) => `<td class="n">${a.n ? a.byCriteria[cid].toFixed(1) : '—'}</td>`).join('') + '</tr>';
+  });
+  h += '</tbody></table>';
+  const miss = subs.filter(([sid]) => agg[sid].n && agg[sid].n < Object.keys(D.raters||{}).length);
+  if (miss.length) h += `<p style="color:var(--stop);font-size:12.5px;margin:10px 0 0">제출 인원이 다른 대상이 ${miss.length}건 있습니다. 평균 비교 전에 제출 현황을 확인하세요.</p>`;
+  $('#resWrap').innerHTML = h;
+}
+$('#btnCsv').onclick = () => {
+  const cri = criList(), subs = subList(), rats = raterList();
+  const rows = [['대상','심사위원','사번','소속','직위','문항','점수']];
+  subs.forEach(([sid,sv]) => {
+    const sc = (D.scores||{})[sid] || {};
+    rats.forEach(([rid,rv]) => {
+      const v = sc[rid]; if (!v) return;
+      cri.forEach(([cid,cv]) => rows.push([sv.name, rv.name, rv.empno||'', rv.dept||'', rv.position||'', cv.label, num((v.v||{})[cid])]));
+      rows.push([sv.name, rv.name, rv.empno||'', rv.dept||'', rv.position||'', '총점', num(v.total)]);
+    });
+  });
+  const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = `평가원본_${CODE}.csv`; a.click();
+};
+
+/* ── 공개 화면 제어 ─────────────────────────────────────── */
+function renderScreenCtl(){
+  const sc = D.screen || {}, subs = subList();
+  const sel = $('#scrPick'), keep = sel.value || sc.sid || '';
+  sel.innerHTML = subs.map(([k,v],i) => `<option value="${k}">${i+1}. ${esc(v.name)}</option>`).join('');
+  if (keep) sel.value = keep;
+  const MODE = { idle:'대기 화면', progress:'제출 진행률', reveal:'점수 공개', rank:'전체 순위' };
+  const name = (D.subjects[sc.sid]||{}).name || '';
+  $('#scrState').textContent = (MODE[sc.mode] || '대기 화면') + (sc.sid && (sc.mode==='reveal'||sc.mode==='progress') ? ' — ' + name : '');
+}
+$$('button[data-scr]').forEach(b => b.onclick = () => {
+  const mode = b.dataset.scr;
+  S.child('screen').set({ mode, sid: $('#scrPick').value || null, ts: Date.now() });
+  toast('공개 화면을 전환했습니다');
+});
+</script>
+</body>
+</html>

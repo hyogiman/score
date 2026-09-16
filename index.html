@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>평가 채점</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#dde2e6; --panel:#ffffff; --panel-2:#f4f7f8;
+  --ink:#16212b; --ink-2:#4c5b66; --ink-3:#8494a0;
+  --line:#aeb9c1; --line-2:#d6dde1;
+  --go:#0a7361; --hold:#a8790a; --stop:#a8172c;
+  --sans:"IBM Plex Sans KR",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-text-size-adjust:100%}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+.scale{height:22px;background:var(--ink);position:relative}
+.scale::before{content:"";position:absolute;left:0;right:0;bottom:0;height:6px;
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,.45) 0 1px,transparent 1px 8px)}
+.scale::after{content:"";position:absolute;left:0;right:0;bottom:0;height:13px;
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,.9) 0 1.5px,transparent 1.5px 40px)}
+
+header{background:var(--ink);color:#e8eef1;padding:11px 16px}
+header b{font-size:15px;font-weight:600;display:block}
+header .me{font-size:12px;color:#9fb1bb;margin-top:2px;display:flex;gap:8px;align-items:center}
+header .me button{margin-left:auto;background:transparent;border:1px solid #47555f;color:#a9bac3;font-size:11px;padding:3px 8px;border-radius:2px}
+
+.wrap{max-width:640px;margin:0 auto;padding:16px 14px 80px}
+.panel{background:var(--panel);border:1px solid var(--line);margin-bottom:14px}
+.panel>h2{margin:0;background:var(--ink);color:#eef3f6;font-size:12.5px;font-weight:600;padding:7px 12px;display:flex;align-items:center;gap:8px}
+.panel>h2 .st{margin-left:auto;font-weight:500;font-size:11.5px;padding:1px 8px;border-radius:2px;background:#33424d;color:#cfe0e6}
+.panel>h2 .st.go{background:var(--go);color:#fff}
+.panel>h2 .st.done{background:#5d7a6f;color:#fff}
+.panel .body{padding:14px}
+
+button{font:inherit;font-size:14px;border:1px solid var(--ink);background:var(--panel);color:var(--ink);padding:9px 14px;cursor:pointer;border-radius:2px}
+button.primary{background:var(--ink);color:#fff;width:100%;font-size:15px;padding:12px}
+button.primary:disabled{background:var(--line);border-color:var(--line);color:#fff;cursor:not-allowed}
+button.ghost{border-color:var(--line);color:var(--ink-2)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--go);outline-offset:2px}
+input[type=text]{font:inherit;font-size:15px;border:1px solid var(--line);background:#fff;padding:10px;border-radius:2px;width:100%;color:var(--ink)}
+
+/* 게이지 — 이 화면의 중심 조형 */
+.cri{padding:14px 0;border-bottom:1px dotted var(--line-2)}
+.cri:first-child{padding-top:2px}
+.cri:last-child{border-bottom:none;padding-bottom:4px}
+.cri .top{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
+.cri .lab{font-weight:600;font-size:15px}
+.cri .max{color:var(--ink-3);font-size:12px;font-family:var(--mono)}
+.cri .desc{color:var(--ink-2);font-size:12.5px;margin-bottom:10px;word-break:keep-all}
+.gauge{display:grid;grid-template-columns:1fr 84px;gap:12px;align-items:center}
+.track{position:relative}
+.ticks{height:9px;border-left:1px solid var(--line);border-right:1px solid var(--line);
+  background:repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px var(--gap,10%));}
+.scaleNums{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:1px}
+input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--ink);height:26px}
+.readout{border:1px solid var(--line);background:#fff;padding:7px 4px;text-align:center;font-family:var(--mono);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+.readout.off{color:var(--line);background:var(--panel-2)}
+.stepbtns{display:flex;gap:4px;margin-top:5px}
+.stepbtns button{flex:1;padding:4px 0;font-size:13px;border-color:var(--line-2);color:var(--ink-2);font-family:var(--mono)}
+
+.totalrow{display:flex;align-items:baseline;gap:8px;padding:12px 0 14px;border-top:2px solid var(--ink);margin-top:6px}
+.totalrow .t{font-size:13px;color:var(--ink-2)}
+.totalrow .v{margin-left:auto;font-family:var(--mono);font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+.totalrow .m{font-family:var(--mono);font-size:14px;color:var(--ink-3)}
+
+.empty{text-align:center;padding:40px 16px;color:var(--ink-2)}
+.empty .big{font-size:17px;font-weight:600;color:var(--ink);margin-bottom:6px}
+.banner{padding:10px 13px;border:1px solid var(--stop);background:#fbeef0;color:var(--stop);margin-bottom:14px;font-size:13px}
+.banner.warn{border-color:var(--hold);background:#fdf6e6;color:#7a5a05}
+.hidden{display:none!important}
+.saved{font-size:12.5px;color:var(--go);display:flex;gap:6px;align-items:center}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;font-size:14px;border-radius:2px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:9}
+#toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="scale"></div>
+<header>
+  <b id="hTitle">평가 채점</b>
+  <div class="me"><span id="hMe">—</span><button id="btnReset" class="hidden">등록 정보 지우기</button></div>
+</header>
+
+<div class="wrap">
+  <div id="dbWarn" class="banner hidden"></div>
+
+  <!-- 등록 -->
+  <section id="reg" class="panel hidden">
+    <h2>심사위원 등록</h2>
+    <div class="body">
+      <p style="margin:0 0 14px;color:var(--ink-2);font-size:13px">공개 화면에는 평균만 표시되고, 누가 몇 점을 주었는지는 나오지 않습니다. 등록 정보는 운영자 확인용입니다.</p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div><div style="font-size:12.5px;color:var(--ink-2);margin-bottom:4px">성명</div><input type="text" id="rName" autocomplete="name"></div>
+        <div><div style="font-size:12.5px;color:var(--ink-2);margin-bottom:4px">사번</div><input type="text" id="rNo" inputmode="numeric" autocomplete="off"></div>
+        <div><div style="font-size:12.5px;color:var(--ink-2);margin-bottom:4px">소속</div><input type="text" id="rDept" autocomplete="organization"></div>
+        <div><div style="font-size:12.5px;color:var(--ink-2);margin-bottom:4px">직위</div><input type="text" id="rPos" autocomplete="organization-title"></div>
+      </div>
+      <div id="regErr" class="banner hidden" style="margin:12px 0 0"></div>
+      <button class="primary" id="btnReg" style="margin-top:14px">등록하고 시작하기</button>
+    </div>
+  </section>
+
+  <!-- 채점 -->
+  <div id="board" class="hidden"></div>
+</div>
+<div id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   DATABASE_URL 은 admin.html / screen.html 과 반드시 같은 값이어야 합니다.
+   Firebase 콘솔 > Realtime Database 화면 맨 위 주소를 그대로 넣으세요.
+   ═══════════════════════════════════════════════════════════════ */
+const DATABASE_URL = "https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCXGmsExbOCnvxDZpXcL1A10FlKeGZjjUI",
+  authDomain: "score-ee66c.firebaseapp.com",
+  projectId: "score-ee66c",
+  storageBucket: "score-ee66c.firebasestorage.app",
+  messagingSenderId: "133802236314",
+  appId: "1:133802236314:web:e75ae03d56f2c0ee058223",
+  databaseURL: DATABASE_URL
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const CODE = (new URLSearchParams(location.search).get('s') || 'main').trim().replace(/[.#$\[\]\/\s]/g,'') || 'main';
+const S = db.ref('sessions/' + CODE);
+const LK = { me: 'sc.' + CODE + '.me', sc: 'sc.' + CODE + '.scores' };
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v,d=0) => { const n = Number(v); return isFinite(n) ? n : d; };
+function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),1900); }
+function load(k,d){ try { return JSON.parse(localStorage.getItem(k)) || d; } catch(e) { return d; } }
+function save(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+
+let ME = load(LK.me, null);
+let MYSC = load(LK.sc, {});          // {sid:{cid:점수}} — 내가 준 점수 (내 기기에만 저장)
+let SENT = load(LK.sc + '.sent', {}); // {sid:true} — 제출 완료 표시
+let D = { config:{}, criteria:{}, subjects:{} };
+let draft = {};   // 편집 중인 값 {sid:{cid:{v,touched}}}
+let openCards = {};
+
+/* 연결 확인 */
+let ok = false;
+db.ref('.info/connected').on('value', s => { if (s.val() === true) ok = true; });
+setTimeout(() => { if (!ok) { $('#dbWarn').classList.remove('hidden'); $('#dbWarn').textContent = '서버에 연결되지 않았습니다. 네트워크를 확인하고 새로고침해 주세요.'; } }, 6000);
+
+/* 데이터 구독 */
+['config','criteria','subjects'].forEach(p => S.child(p).on('value', s => { D[p] = s.val() || {}; render(); }));
+
+function criList(){ return Object.entries(D.criteria||{}).sort((a,b)=>num(a[1].order)-num(b[1].order)); }
+function subList(){ return Object.entries(D.subjects||{}).sort((a,b)=>num(a[1].order)-num(b[1].order)); }
+
+/* ── 등록 ───────────────────────────────────────────────── */
+function showReg(){
+  $('#reg').classList.remove('hidden');
+  $('#board').classList.add('hidden');
+  $('#btnReset').classList.add('hidden');
+}
+$('#btnReg').onclick = () => {
+  const name = $('#rName').value.trim();
+  if (!name) { const b = $('#regErr'); b.classList.remove('hidden'); b.textContent = '성명을 입력해 주세요.'; $('#rName').focus(); return; }
+  const rid = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+  const rec = { name, empno: $('#rNo').value.trim(), dept: $('#rDept').value.trim(), position: $('#rPos').value.trim(), at: Date.now() };
+  S.child('raters/' + rid).set(rec).then(() => {
+    S.child('stats/raterCount').transaction(c => (c || 0) + 1).catch(()=>{});
+    ME = Object.assign({ rid }, rec);
+    save(LK.me, ME);
+    $('#reg').classList.add('hidden');
+    render();
+    toast('등록되었습니다');
+  }).catch(err => {
+    const b = $('#regErr'); b.classList.remove('hidden');
+    b.textContent = '등록하지 못했습니다. 세션 주소가 맞는지 확인해 주세요. (' + err.code + ')';
+  });
+};
+$('#btnReset').onclick = () => {
+  if (!confirm('이 기기에 저장된 등록 정보와 내가 준 점수 기록을 지웁니다. 서버에 제출한 점수는 그대로 남습니다.')) return;
+  [LK.me, LK.sc, LK.sc + '.sent'].forEach(k => localStorage.removeItem(k));
+  location.reload();
+};
+
+/* ── 렌더 ───────────────────────────────────────────────── */
+function render(){
+  $('#hTitle').textContent = (D.config||{}).title || '평가 채점';
+  if (!ME) { showReg(); return; }
+  $('#hMe').textContent = ME.name + (ME.dept ? ' · ' + ME.dept : '') + (ME.position ? ' ' + ME.position : '');
+  $('#btnReset').classList.remove('hidden');
+  $('#reg').classList.add('hidden');
+  $('#board').classList.remove('hidden');
+
+  const cri = criList(), subs = subList();
+  const allowEdit = (D.config||{}).allowEditClosed !== false;
+  const maxTotal = cri.reduce((s,[,v])=>s+num(v.max),0);
+
+  if (!cri.length || !subs.length) {
+    $('#board').innerHTML = '<div class="panel"><div class="body"><div class="empty"><div class="big">아직 준비 중입니다</div>운영자가 평가 문항과 대상을 등록하면 여기에 나타납니다.</div></div></div>';
+    return;
+  }
+
+  const openOnes = subs.filter(([,v]) => v.state === 'open');
+  const closedOnes = subs.filter(([,v]) => v.state === 'closed');
+
+  let h = '';
+  if (!openOnes.length && !closedOnes.length) {
+    h += '<div class="panel"><div class="body"><div class="empty"><div class="big">채점 대기 중</div>발표가 시작되면 운영자가 채점 칸을 열어 줍니다.<br>이 화면을 켜 둔 채로 기다려 주세요.</div></div></div>';
+  }
+  if (openOnes.length) h += openOnes.map(([sid,sv]) => card(sid, sv, cri, maxTotal, true)).join('');
+  if (closedOnes.length) {
+    h += `<div style="margin:22px 0 10px;font-size:12.5px;color:var(--ink-2);border-top:1px solid var(--line);padding-top:12px">마감된 대상 ${allowEdit ? '— 아직 수정할 수 있습니다' : '— 잠겨 있습니다'}</div>`;
+    h += closedOnes.map(([sid,sv]) => card(sid, sv, cri, maxTotal, allowEdit)).join('');
+  }
+  $('#board').innerHTML = h;
+  wire(cri, maxTotal);
+}
+function card(sid, sv, cri, maxTotal, editable){
+  const sent = !!SENT[sid];
+  const mine = MYSC[sid] || {};
+  const st = sent ? (editable ? '제출 완료 · 수정 가능' : '제출 완료') : (editable ? '채점 가능' : '미제출 · 마감됨');
+  const stc = sent ? 'done' : (editable ? 'go' : '');
+  const d = draft[sid] || (draft[sid] = {});
+  cri.forEach(([cid,cv]) => {
+    if (d[cid] === undefined) {
+      const has = mine[cid] !== undefined;
+      d[cid] = { v: has ? num(mine[cid]) : Math.round(num(cv.max,25) / 2), touched: has };
+    }
+  });
+  const body = cri.map(([cid,cv]) => {
+    const mx = Math.max(1, num(cv.max, 25));
+    const step = mx > 40 ? 1 : 1;
+    const marks = Math.min(10, mx);
+    const val = d[cid].v, touched = d[cid].touched;
+    return `<div class="cri" data-cid="${cid}">
+      <div class="top"><span class="lab">${esc(cv.label)}</span><span class="max">/ ${mx}점</span></div>
+      ${cv.desc ? `<div class="desc">${esc(cv.desc)}</div>` : ''}
+      <div class="gauge">
+        <div class="track">
+          <div class="ticks" style="--gap:${(100/marks).toFixed(3)}%"></div>
+          <div class="scaleNums"><span>0</span><span>${Math.round(mx/2)}</span><span>${mx}</span></div>
+          <input type="range" min="0" max="${mx}" step="${step}" value="${val}" ${editable?'':'disabled'} aria-label="${esc(cv.label)}">
+        </div>
+        <div>
+          <div class="readout ${touched?'':'off'}">${touched ? val : '—'}</div>
+          <div class="stepbtns"><button data-d="-1" ${editable?'':'disabled'}>−</button><button data-d="1" ${editable?'':'disabled'}>＋</button></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  const done = cri.every(([cid]) => d[cid].touched);
+  const total = cri.reduce((s,[cid]) => s + (d[cid].touched ? d[cid].v : 0), 0);
+  return `<section class="panel" data-sid="${sid}">
+    <h2>${esc(sv.name)}${sv.desc ? ' · ' + esc(sv.desc) : ''}<span class="st ${stc}">${st}</span></h2>
+    <div class="body">
+      ${body}
+      <div class="totalrow"><span class="t">총점</span>
+        <span class="v" data-total>${done ? total : '—'}</span><span class="m">/ ${maxTotal}</span></div>
+      ${editable
+        ? `<button class="primary" data-submit ${done?'':'disabled'}>${sent ? '수정 내용 저장' : '제출'}</button>
+           ${done ? '' : '<div style="text-align:center;font-size:12.5px;color:var(--ink-3);margin-top:8px">모든 문항을 한 번씩 조정해야 제출됩니다</div>'}`
+        : `<div style="text-align:center;font-size:13px;color:var(--ink-3)">이 대상은 마감되었습니다</div>`}
+    </div>
+  </section>`;
+}
+
+function wire(cri, maxTotal){
+  document.querySelectorAll('section.panel[data-sid]').forEach(sec => {
+    const sid = sec.dataset.sid, d = draft[sid];
+    sec.querySelectorAll('.cri').forEach(row => {
+      const cid = row.dataset.cid;
+      const rng = row.querySelector('input[type=range]');
+      const out = row.querySelector('.readout');
+      const set = v => {
+        const mx = num(rng.max, 25);
+        v = Math.max(0, Math.min(mx, Math.round(v)));
+        d[cid] = { v, touched: true };
+        rng.value = v; out.textContent = v; out.classList.remove('off');
+        refresh(sec, cri, maxTotal);
+      };
+      rng.addEventListener('input', () => set(num(rng.value)));
+      row.querySelectorAll('.stepbtns button').forEach(b => b.onclick = () => set(num(rng.value) + num(b.dataset.d)));
+    });
+    const btn = sec.querySelector('[data-submit]');
+    if (btn) btn.onclick = () => submit(sid, cri, sec);
+  });
+}
+function refresh(sec, cri, maxTotal){
+  const sid = sec.dataset.sid, d = draft[sid];
+  const done = cri.every(([cid]) => d[cid] && d[cid].touched);
+  const total = cri.reduce((s,[cid]) => s + (d[cid] && d[cid].touched ? d[cid].v : 0), 0);
+  sec.querySelector('[data-total]').textContent = done ? total : '—';
+  const btn = sec.querySelector('[data-submit]');
+  if (btn) btn.disabled = !done;
+}
+function submit(sid, cri, sec){
+  const d = draft[sid];
+  const v = {}; let total = 0;
+  cri.forEach(([cid]) => { v[cid] = d[cid].v; total += d[cid].v; });
+  const btn = sec.querySelector('[data-submit]');
+  btn.disabled = true; btn.textContent = '저장 중';
+  S.child('scores/' + sid + '/' + ME.rid).set({ v, total, at: Date.now() }).then(() => {
+    MYSC[sid] = v; SENT[sid] = true;
+    save(LK.sc, MYSC); save(LK.sc + '.sent', SENT);
+    toast('제출되었습니다');
+    render();
+  }).catch(err => {
+    btn.disabled = false; btn.textContent = '제출';
+    alert(err.code === 'PERMISSION_DENIED'
+      ? '이 대상은 지금 채점할 수 없습니다. 운영자가 마감했거나 아직 열지 않았습니다.'
+      : '제출하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  });
+}
+
+if (!ME) showReg();
+</script>
+</body>
+</html>

@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>평가 결과</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f1a21; --bg-2:#16242d; --panel:#1b2c36;
+  --fg:#e9f1f4; --fg-2:#9db1bc; --fg-3:#5d7382;
+  --line:#2c4552; --go:#41c2a6; --amber:#e8b33c;
+  --sans:"IBM Plex Sans KR",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);display:flex;flex-direction:column}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* 상단 계측 스케일 */
+.scale{height:26px;background:var(--panel);position:relative;flex:none;border-bottom:1px solid var(--line)}
+.scale::before{content:"";position:absolute;left:0;right:0;bottom:0;height:7px;
+  background:repeating-linear-gradient(90deg,var(--fg-3) 0 1px,transparent 1px 9px)}
+.scale::after{content:"";position:absolute;left:0;right:0;bottom:0;height:15px;
+  background:repeating-linear-gradient(90deg,var(--fg-2) 0 1.5px,transparent 1.5px 45px)}
+
+header{flex:none;padding:14px 34px;display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line)}
+header .t{font-size:17px;font-weight:600;letter-spacing:.01em}
+header .c{margin-left:auto;font-family:var(--mono);font-size:13px;color:var(--fg-3)}
+
+main{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;padding:26px 34px 34px}
+
+/* 대기 */
+.idle{text-align:center}
+.idle .k{font-size:clamp(28px,4.4vw,56px);font-weight:600;margin-bottom:14px}
+.idle .s{color:var(--fg-2);font-size:clamp(14px,1.5vw,20px)}
+
+/* 제출 진행 */
+.prog .name{font-size:clamp(24px,3.4vw,44px);font-weight:600;margin-bottom:26px}
+.dots{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:22px}
+.dots i{width:clamp(26px,3vw,44px);height:clamp(26px,3vw,44px);border:2px solid var(--line);border-radius:50%;display:block}
+.dots i.f{background:var(--go);border-color:var(--go)}
+.prog .cnt{font-family:var(--mono);font-size:clamp(18px,2.2vw,30px);color:var(--fg-2)}
+.prog .cnt b{color:var(--fg);font-weight:600}
+
+/* 점수 공개 */
+.rev .name{font-size:clamp(22px,3vw,40px);font-weight:600;margin-bottom:6px}
+.rev .meta{color:var(--fg-3);font-size:14px;font-family:var(--mono);margin-bottom:22px}
+.bigrow{display:flex;align-items:flex-end;gap:18px;margin-bottom:6px}
+.big{font-family:var(--mono);font-size:clamp(72px,15vw,190px);font-weight:600;line-height:.9;letter-spacing:-.02em}
+.big .den{font-size:.26em;color:var(--fg-3);font-weight:400;letter-spacing:0}
+
+/* 계측 바 — 이 화면의 주인공 */
+.meter{position:relative;height:56px;margin:18px 0 26px}
+.meter .rail{position:absolute;left:0;right:0;top:18px;height:14px;background:var(--bg-2);border:1px solid var(--line)}
+.meter .fill{position:absolute;left:1px;top:19px;height:12px;background:var(--go);width:0;transition:width .9s cubic-bezier(.16,.9,.3,1)}
+.meter .tick{position:absolute;left:0;right:0;top:34px;height:12px;
+  background:repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px 2.5%)}
+.meter .tick.major{top:34px;height:20px;
+  background:repeating-linear-gradient(90deg,var(--fg-3) 0 1.5px,transparent 1.5px 12.5%)}
+.meter .needle{position:absolute;top:6px;height:40px;width:3px;background:var(--amber);left:0;transition:left .9s cubic-bezier(.16,.9,.3,1)}
+.meter .needle::after{content:"";position:absolute;top:-8px;left:-5px;border:6px solid transparent;border-top-color:var(--amber)}
+.meter .ends{position:absolute;left:0;right:0;top:56px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--fg-3)}
+
+.crilist{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px 26px;margin-top:34px}
+.crirow .l{display:flex;align-items:baseline;gap:8px;font-size:14px;color:var(--fg-2);margin-bottom:5px}
+.crirow .l b{margin-left:auto;font-family:var(--mono);font-size:17px;color:var(--fg);font-weight:600}
+.crirow .b{height:8px;background:var(--bg-2);border:1px solid var(--line);position:relative}
+.crirow .b i{position:absolute;left:0;top:0;bottom:0;background:var(--fg-2);width:0;transition:width .8s ease}
+
+/* 순위 */
+.rank{width:100%;max-height:100%;overflow:hidden}
+.rank .r{display:grid;grid-template-columns:54px 1fr 190px 96px;gap:16px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.rank .r:last-child{border-bottom:none}
+.rank .pos{font-family:var(--mono);font-size:clamp(17px,2vw,26px);color:var(--fg-3);text-align:right}
+.rank .r.top .pos{color:var(--amber)}
+.rank .nm{font-size:clamp(15px,1.7vw,22px);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rank .bar{height:11px;background:var(--bg-2);border:1px solid var(--line);position:relative}
+.rank .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--go);width:0;transition:width .8s ease}
+.rank .r.top .bar i{background:var(--amber)}
+.rank .av{font-family:var(--mono);font-size:clamp(17px,2vw,26px);font-weight:600;text-align:right}
+.rank h3{margin:0 0 16px;font-size:clamp(18px,2.2vw,28px);font-weight:600}
+
+.note{position:fixed;left:34px;bottom:14px;font-size:12px;color:var(--fg-3)}
+.hidden{display:none!important}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:760px){header,main{padding-left:16px;padding-right:16px}.rank .r{grid-template-columns:38px 1fr 76px}.rank .bar{display:none}.note{left:16px}}
+</style>
+</head>
+<body>
+<div class="scale"></div>
+<header><span class="t" id="hTitle">평가</span><span class="c" id="hCode"></span></header>
+<main id="stage"></main>
+<div class="note" id="note">개별 점수와 평가자는 표시되지 않습니다</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   DATABASE_URL 은 admin.html / index.html 과 반드시 같은 값이어야 합니다.
+   ═══════════════════════════════════════════════════════════════ */
+const DATABASE_URL = "https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCXGmsExbOCnvxDZpXcL1A10FlKeGZjjUI",
+  authDomain: "score-ee66c.firebaseapp.com",
+  projectId: "score-ee66c",
+  storageBucket: "score-ee66c.firebasestorage.app",
+  messagingSenderId: "133802236314",
+  appId: "1:133802236314:web:e75ae03d56f2c0ee058223",
+  databaseURL: DATABASE_URL
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const CODE = (new URLSearchParams(location.search).get('s') || 'main').trim().replace(/[.#$\[\]\/\s]/g,'') || 'main';
+const S = db.ref('sessions/' + CODE);
+const $ = s => document.querySelector(s);
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v,d=0) => { const n = Number(v); return isFinite(n) ? n : d; };
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* 이 화면은 aggregate(집계 결과)만 읽습니다. 개별 점수 경로는 구독하지 않습니다. */
+let D = { config:{}, criteria:{}, subjects:{}, aggregate:{}, stats:{}, screen:{} };
+['config','criteria','subjects','aggregate','stats','screen'].forEach(p =>
+  S.child(p).on('value', s => { D[p] = s.val() || {}; render(); }));
+
+$('#hCode').textContent = CODE;
+function criList(){ return Object.entries(D.criteria||{}).sort((a,b)=>num(a[1].order)-num(b[1].order)); }
+function subList(){ return Object.entries(D.subjects||{}).sort((a,b)=>num(a[1].order)-num(b[1].order)); }
+
+let lastKey = '';
+function render(){
+  $('#hTitle').textContent = (D.config||{}).title || '평가';
+  const sc = D.screen || {};
+  const mode = sc.mode || 'idle';
+  const sid = sc.sid;
+  const key = mode + '|' + (sid||'') + '|' + (sc.ts||'');
+  const fresh = key !== lastKey;
+  lastKey = key;
+
+  if (mode === 'rank') return drawRank(fresh);
+  if (mode === 'reveal' && sid) return drawReveal(sid, fresh);
+  if (mode === 'progress' && sid) return drawProgress(sid, fresh);
+  return drawIdle();
+}
+
+function drawIdle(){
+  const n = subList().length;
+  $('#stage').innerHTML = `<div class="idle">
+    <div class="k">${esc((D.config||{}).title || '평가를 시작합니다')}</div>
+    <div class="s">${n ? '평가 대상 ' + n + '건 · 채점이 끝나면 결과를 공개합니다' : '준비 중입니다'}</div>
+  </div>`;
+}
+
+function drawProgress(sid, fresh){
+  const sv = (D.subjects||{})[sid] || {};
+  const a = (D.aggregate||{})[sid] || {};
+  const total = Math.max(num((D.stats||{}).raterCount), num(a.n));
+  const done = num(a.n);
+  let dots = '';
+  for (let i = 0; i < Math.max(total,1); i++) dots += `<i class="${i < done ? 'f' : ''}"></i>`;
+  $('#stage').innerHTML = `<div class="prog">
+    <div class="name">${esc(sv.name || '')}</div>
+    <div class="dots">${dots}</div>
+    <div class="cnt"><b>${done}</b> / ${total} 명 제출</div>
+  </div>`;
+}
+
+function drawReveal(sid, fresh){
+  const sv = (D.subjects||{})[sid] || {};
+  const a = (D.aggregate||{})[sid];
+  if (!a || !num(a.n)) {
+    $('#stage').innerHTML = `<div class="idle"><div class="k">${esc(sv.name||'')}</div><div class="s">아직 제출된 점수가 없습니다</div></div>`;
+    return;
+  }
+  const mx = Math.max(1, num(a.maxTotal, 100));
+  const cri = criList();
+  const meta = `${a.n}명 제출` + (a.trimmed ? ` · 최고·최저 제외 ${a.used}명 반영` : '');
+  $('#stage').innerHTML = `<div class="rev">
+    <div class="name">${esc(sv.name || '')}</div>
+    <div class="meta">${meta}</div>
+    <div class="bigrow"><span class="big" id="bigv">0<span class="den"> / ${mx}</span></span></div>
+    <div class="meter">
+      <div class="rail"></div><div class="fill" id="mfill"></div>
+      <div class="tick"></div><div class="tick major"></div>
+      <div class="needle" id="mneedle"></div>
+      <div class="ends"><span>0</span><span>${Math.round(mx/2)}</span><span>${mx}</span></div>
+    </div>
+    <div class="crilist">${cri.map(([cid,cv]) => {
+      const v = num((a.byCriteria||{})[cid]);
+      const cm = Math.max(1, num(cv.max, 25));
+      return `<div class="crirow">
+        <div class="l"><span>${esc(cv.label)}</span><b>${v.toFixed(1)}<span style="color:var(--fg-3);font-size:.7em;font-weight:400"> / ${cm}</span></b></div>
+        <div class="b"><i data-w="${Math.max(0,Math.min(100, v/cm*100))}"></i></div>
+      </div>`;
+    }).join('')}</div>
+  </div>`;
+
+  const pct = Math.max(0, Math.min(100, a.avg / mx * 100));
+  requestAnimationFrame(() => {
+    $('#mfill').style.width = 'calc(' + pct + '% - 2px)';
+    $('#mneedle').style.left = 'calc(' + pct + '% - 1.5px)';
+    document.querySelectorAll('.crirow .b i').forEach(i => i.style.width = i.dataset.w + '%');
+  });
+  countUp($('#bigv'), a.avg, mx, fresh && !reduce);
+}
+
+function countUp(el, target, mx, animate){
+  const den = ` / ${mx}`;
+  const put = v => el.innerHTML = v.toFixed(2).replace(/\.00$/,'.00') + `<span class="den">${den}</span>`;
+  if (!animate) { put(target); return; }
+  const dur = 1100, t0 = performance.now();
+  (function step(t){
+    const p = Math.min(1, (t - t0) / dur);
+    const e = 1 - Math.pow(1 - p, 3);
+    put(target * e);
+    if (p < 1) requestAnimationFrame(step);
+  })(performance.now());
+}
+
+function drawRank(fresh){
+  const subs = subList(), agg = D.aggregate || {};
+  const scored = subs.filter(([sid]) => agg[sid] && num(agg[sid].n) > 0);
+  if (!scored.length) { drawIdle(); return; }
+  const mx = Math.max(1, num((agg[scored[0][0]]||{}).maxTotal, 100));
+  const ranked = scored.slice().sort((a,b) => num(agg[b[0]].avg) - num(agg[a[0]].avg));
+  const best = num(agg[ranked[0][0]].avg) || 1;
+  $('#stage').innerHTML = `<div class="rank"><h3>종합 결과 · 만점 ${mx}점</h3>` +
+    ranked.map(([sid,sv], i) => {
+      const a = agg[sid];
+      const w = Math.max(0, Math.min(100, a.avg / mx * 100));
+      return `<div class="r ${i===0?'top':''}">
+        <div class="pos">${i+1}</div>
+        <div class="nm">${esc(sv.name)}</div>
+        <div class="bar"><i data-w="${w}"></i></div>
+        <div class="av">${num(a.avg).toFixed(2)}</div>
+      </div>`;
+    }).join('') + '</div>';
+  requestAnimationFrame(() => document.querySelectorAll('.rank .bar i').forEach(i => i.style.width = i.dataset.w + '%'));
+}
+
+drawIdle();
+</script>
+</body>
+</html>
