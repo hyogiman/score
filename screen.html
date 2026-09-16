@@ -116,21 +116,36 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const CODE = (new URLSearchParams(location.search).get('s') || 'main').trim().replace(/[.#$\[\]\/\s]/g,'') || 'main';
-const S = db.ref('sessions/' + CODE);
 const $ = s => document.querySelector(s);
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = (v,d=0) => { const n = Number(v); return isFinite(n) ? n : d; };
+const clean = c => String(c||'').trim().replace(/[.#$\[\]\/\s]/g,'');
 const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* 이 화면은 aggregate(집계 결과)만 읽습니다. 개별 점수 경로는 구독하지 않습니다. */
-let D = { config:{}, criteria:{}, subjects:{}, aggregate:{}, stats:{}, screen:{} };
-['config','criteria','subjects','aggregate','stats','screen'].forEach(p =>
-  S.child(p).on('value', s => { D[p] = s.val() || {}; render(); }));
+let CODE = null, S = null;
+let D = { config:{}, criteria:{}, subjects:{}, aggregate:{}, roster:{}, screen:{} };
 
-$('#hCode').textContent = CODE;
+const FIXED = clean(new URLSearchParams(location.search).get('s'));
+if (FIXED) boot(FIXED);
+else db.ref('activeSession').on('value', s => {
+  const c = clean(s.val()) || 'main';
+  if (CODE === null) boot(c);
+  else if (c !== CODE) location.reload();
+});
+
+function boot(code){
+  CODE = code;
+  S = db.ref('sessions/' + CODE);
+  $('#hCode').textContent = CODE;
+  ['config','criteria','subjects','aggregate','roster','screen'].forEach(p =>
+    S.child(p).on('value', s => { D[p] = s.val() || {}; render(); }));
+  render();
+}
+
 function criList(){ return Object.entries(D.criteria||{}).sort((a,b)=>num(a[1].order)-num(b[1].order)); }
 function subList(){ return Object.entries(D.subjects||{}).sort((a,b)=>num(a[1].order)-num(b[1].order)); }
+function raterTotal(){ return Object.keys(D.roster||{}).length; }
 
 let lastKey = '';
 function render(){
@@ -150,55 +165,48 @@ function render(){
 
 function drawIdle(){
   const n = subList().length;
-  $('#stage').innerHTML = `<div class="idle">
-    <div class="k">${esc((D.config||{}).title || '평가를 시작합니다')}</div>
-    <div class="s">${n ? '평가 대상 ' + n + '건 · 채점이 끝나면 결과를 공개합니다' : '준비 중입니다'}</div>
-  </div>`;
+  $('#stage').innerHTML = '<div class="idle">' +
+    '<div class="k">' + esc((D.config||{}).title || '평가를 시작합니다') + '</div>' +
+    '<div class="s">' + (n ? '평가 대상 ' + n + '건 · 채점이 끝나면 결과를 공개합니다' : '준비 중입니다') + '</div></div>';
 }
 
-function drawProgress(sid, fresh){
+function drawProgress(sid){
   const sv = (D.subjects||{})[sid] || {};
   const a = (D.aggregate||{})[sid] || {};
-  const total = Math.max(num((D.stats||{}).raterCount), num(a.n));
+  const total = Math.max(raterTotal(), num(a.n));
   const done = num(a.n);
   let dots = '';
-  for (let i = 0; i < Math.max(total,1); i++) dots += `<i class="${i < done ? 'f' : ''}"></i>`;
-  $('#stage').innerHTML = `<div class="prog">
-    <div class="name">${esc(sv.name || '')}</div>
-    <div class="dots">${dots}</div>
-    <div class="cnt"><b>${done}</b> / ${total} 명 제출</div>
-  </div>`;
+  for (let i = 0; i < Math.max(total,1); i++) dots += '<i class="' + (i < done ? 'f' : '') + '"></i>';
+  $('#stage').innerHTML = '<div class="prog">' +
+    '<div class="name">' + esc(sv.name || '') + '</div>' +
+    '<div class="dots">' + dots + '</div>' +
+    '<div class="cnt"><b>' + done + '</b> / ' + total + ' 명 제출</div></div>';
 }
 
 function drawReveal(sid, fresh){
   const sv = (D.subjects||{})[sid] || {};
   const a = (D.aggregate||{})[sid];
   if (!a || !num(a.n)) {
-    $('#stage').innerHTML = `<div class="idle"><div class="k">${esc(sv.name||'')}</div><div class="s">아직 제출된 점수가 없습니다</div></div>`;
+    $('#stage').innerHTML = '<div class="idle"><div class="k">' + esc(sv.name||'') + '</div><div class="s">아직 제출된 점수가 없습니다</div></div>';
     return;
   }
   const mx = Math.max(1, num(a.maxTotal, 100));
   const cri = criList();
-  const meta = `${a.n}명 제출` + (a.trimmed ? ` · 최고·최저 제외 ${a.used}명 반영` : '');
-  $('#stage').innerHTML = `<div class="rev">
-    <div class="name">${esc(sv.name || '')}</div>
-    <div class="meta">${meta}</div>
-    <div class="bigrow"><span class="big" id="bigv">0<span class="den"> / ${mx}</span></span></div>
-    <div class="meter">
-      <div class="rail"></div><div class="fill" id="mfill"></div>
-      <div class="tick"></div><div class="tick major"></div>
-      <div class="needle" id="mneedle"></div>
-      <div class="ends"><span>0</span><span>${Math.round(mx/2)}</span><span>${mx}</span></div>
-    </div>
-    <div class="crilist">${cri.map(([cid,cv]) => {
+  const meta = a.n + '명 제출' + (a.trimmed ? ' · 최고·최저 제외 ' + a.used + '명 반영' : '');
+  $('#stage').innerHTML = '<div class="rev">' +
+    '<div class="name">' + esc(sv.name || '') + '</div>' +
+    '<div class="meta">' + meta + '</div>' +
+    '<div class="bigrow"><span class="big" id="bigv">0<span class="den"> / ' + mx + '</span></span></div>' +
+    '<div class="meter"><div class="rail"></div><div class="fill" id="mfill"></div>' +
+      '<div class="tick"></div><div class="tick major"></div><div class="needle" id="mneedle"></div>' +
+      '<div class="ends"><span>0</span><span>' + Math.round(mx/2) + '</span><span>' + mx + '</span></div></div>' +
+    '<div class="crilist">' + cri.map(([cid,cv]) => {
       const v = num((a.byCriteria||{})[cid]);
       const cm = Math.max(1, num(cv.max, 25));
-      return `<div class="crirow">
-        <div class="l"><span>${esc(cv.label)}</span><b>${v.toFixed(1)}<span style="color:var(--fg-3);font-size:.7em;font-weight:400"> / ${cm}</span></b></div>
-        <div class="b"><i data-w="${Math.max(0,Math.min(100, v/cm*100))}"></i></div>
-      </div>`;
-    }).join('')}</div>
-  </div>`;
+      return '<div class="crirow"><div class="l"><span>' + esc(cv.label) + '</span>' +
+        '<b>' + v.toFixed(1) + '<span style="color:var(--fg-3);font-size:.7em;font-weight:400"> / ' + cm + '</span></b></div>' +
+        '<div class="b"><i data-w="' + Math.max(0,Math.min(100, v/cm*100)) + '"></i></div></div>';
+    }).join('') + '</div></div>';
 
   const pct = Math.max(0, Math.min(100, a.avg / mx * 100));
   requestAnimationFrame(() => {
@@ -210,35 +218,32 @@ function drawReveal(sid, fresh){
 }
 
 function countUp(el, target, mx, animate){
-  const den = ` / ${mx}`;
-  const put = v => el.innerHTML = v.toFixed(2).replace(/\.00$/,'.00') + `<span class="den">${den}</span>`;
+  const den = ' / ' + mx;
+  const put = v => el.innerHTML = v.toFixed(2) + '<span class="den">' + den + '</span>';
   if (!animate) { put(target); return; }
   const dur = 1100, t0 = performance.now();
   (function step(t){
     const p = Math.min(1, (t - t0) / dur);
-    const e = 1 - Math.pow(1 - p, 3);
-    put(target * e);
+    put(target * (1 - Math.pow(1 - p, 3)));
     if (p < 1) requestAnimationFrame(step);
   })(performance.now());
 }
 
-function drawRank(fresh){
+function drawRank(){
   const subs = subList(), agg = D.aggregate || {};
   const scored = subs.filter(([sid]) => agg[sid] && num(agg[sid].n) > 0);
   if (!scored.length) { drawIdle(); return; }
   const mx = Math.max(1, num((agg[scored[0][0]]||{}).maxTotal, 100));
   const ranked = scored.slice().sort((a,b) => num(agg[b[0]].avg) - num(agg[a[0]].avg));
-  const best = num(agg[ranked[0][0]].avg) || 1;
-  $('#stage').innerHTML = `<div class="rank"><h3>종합 결과 · 만점 ${mx}점</h3>` +
+  $('#stage').innerHTML = '<div class="rank"><h3>종합 결과 · 만점 ' + mx + '점</h3>' +
     ranked.map(([sid,sv], i) => {
       const a = agg[sid];
       const w = Math.max(0, Math.min(100, a.avg / mx * 100));
-      return `<div class="r ${i===0?'top':''}">
-        <div class="pos">${i+1}</div>
-        <div class="nm">${esc(sv.name)}</div>
-        <div class="bar"><i data-w="${w}"></i></div>
-        <div class="av">${num(a.avg).toFixed(2)}</div>
-      </div>`;
+      return '<div class="r ' + (i===0?'top':'') + '">' +
+        '<div class="pos">' + (i+1) + '</div>' +
+        '<div class="nm">' + esc(sv.name) + '</div>' +
+        '<div class="bar"><i data-w="' + w + '"></i></div>' +
+        '<div class="av">' + num(a.avg).toFixed(2) + '</div></div>';
     }).join('') + '</div>';
   requestAnimationFrame(() => document.querySelectorAll('.rank .bar i').forEach(i => i.style.width = i.dataset.w + '%'));
 }
