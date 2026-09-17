@@ -233,7 +233,7 @@ else db.ref('activeSession').on('value', s => {
 function boot(code){
   CODE = code;
   S = db.ref('sessions/' + CODE);
-  LK = { me: 'sc.' + CODE + '.me', sc: 'sc.' + CODE + '.scores', sent: 'sc.' + CODE + '.sent' };
+  LK = { me: 'sc.' + CODE + '.me', sc: 'sc.' + CODE + '.scores', sent: 'sc.' + CODE + '.sent', reset: 'sc.' + CODE + '.reset' };
   ME = lsGet(LK.me, null);
   MYSC = lsGet(LK.sc, {});
   SENT = lsGet(LK.sent, {});
@@ -317,6 +317,22 @@ $('#btnReset').onclick = async () => {
 
 /* ── 렌더 ── */
 function rosterMode(){ return (D.config||{}).joinMode !== 'open'; }
+
+/* 운영자가 채점을 초기화하면 이 기기에 남은 점수 표시도 함께 지웁니다.
+   개별 점수는 서버에서 되읽을 수 없는 구조라, 초기화 시각을 신호로 씁니다. */
+function applyReset(){
+  if (!LK) return;
+  const r = num((D.config||{}).resetAt, 0);
+  if (!r) return;
+  const seen = num(lsGet(LK.reset, 0), 0);
+  if (r <= seen) return;
+  const had = Object.keys(MYSC).length || Object.keys(SENT).length;
+  MYSC = {}; SENT = {}; draft = {}; SEL = null;
+  localStorage.removeItem(LK.sc);
+  localStorage.removeItem(LK.sent);
+  lsSet(LK.reset, r);
+  if (had && seen) toast('운영자가 채점을 초기화했습니다');
+}
 function showReg(){
   $('#reg').classList.remove('hidden');
   $('#board').classList.add('hidden');
@@ -357,6 +373,7 @@ function pickDefault(subs, cri){
 }
 
 function render(){
+  applyReset();
   $('#hTitle').textContent = (D.config||{}).title || '평가 채점';
   if (!ME) { showReg(); return; }
   $('#hMe').textContent = ME.name + (ME.dept ? ' · ' + ME.dept : '') + (ME.position ? ' ' + ME.position : '');
