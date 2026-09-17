@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <title>평가 채점</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -102,6 +104,7 @@ input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--ink);height:26px}
 .legend{margin-top:7px;font-size:11px;color:var(--ink-3);line-height:1.5}
 .legend b{font-weight:600;color:var(--go)}
 .legend s{text-decoration:none;color:var(--stop)}
+.sessline{margin-top:20px;padding-top:10px;border-top:1px dotted var(--line);font-family:var(--mono);font-size:11px;color:var(--ink-3);display:flex;gap:10px;flex-wrap:wrap}
 .modal{position:fixed;inset:0;background:rgba(22,33,43,.55);display:flex;align-items:center;justify-content:center;z-index:60;padding:18px}
 .mbox{background:#fff;border:1px solid var(--ink);max-width:400px;width:100%}
 .mbox h3{margin:0;background:var(--ink);color:#eef3f6;font-size:13px;padding:9px 13px;font-weight:600}
@@ -149,8 +152,10 @@ input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--ink);height:26px}
   </section>
 
   <!-- 채점 -->
+  <div id="noSess" class="banner warn hidden"></div>
   <div id="nav" class="nav hidden"></div>
   <div id="board" class="hidden"></div>
+  <div class="sessline"><span id="sessInfo">연결 중</span><span id="buildInfo"></span></div>
 </div>
 <div id="dlg" class="modal hidden"><div class="mbox">
   <h3 id="dlgTitle"></h3>
@@ -167,6 +172,7 @@ input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--ink);height:26px}
    Firebase 콘솔 > Realtime Database 화면 맨 위 주소를 그대로 넣으세요.
    ══════════════════════════════════════════════════════════════ */
 const DATABASE_URL = "https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app";
+const BUILD = "2026-09-17f";   /* 화면 아래에 표시됩니다. 세 파일의 값이 같은지로 갱신 여부를 확인하세요 */
 
 const firebaseConfig = {
   apiKey: "AIzaSyCXGmsExbOCnvxDZpXcL1A10FlKeGZjjUI",
@@ -217,18 +223,28 @@ setTimeout(() => { if (!ok) { $('#dbWarn').classList.remove('hidden'); $('#dbWar
    주소에 ?s=코드 가 있으면 그 세션을 고정으로 씨고,
    없으면 admin 에서 지정한 '지금 쓰는 세션'에 자동으로 붙습니다. */
 const FIXED = clean(new URLSearchParams(location.search).get('s'));
-let CODE = null, S = null, LK = null;
+let CODE = null, S = null, LK = null, ACTIVE_SET = false;
 let ME = null, MYSC = {};
 let D = { config:{}, criteria:{}, subjects:{}, progress:{} };
 let draft = {};
 let SEL = null;   // 지금 보고 있는 평가 대상
 
-if (FIXED) boot(FIXED);
+if (FIXED) { ACTIVE_SET = true; boot(FIXED); }
 else db.ref('activeSession').on('value', s => {
-  const c = clean(s.val()) || 'main';
+  const v = clean(s.val());
+  ACTIVE_SET = !!v;
+  const c = v || 'main';
   if (CODE === null) boot(c);
   else if (c !== CODE) location.reload();
+  else paintSess();
 });
+function paintSess(){
+  $('#buildInfo').textContent = '화면 ' + BUILD;
+  $('#sessInfo').textContent = '세션 ' + (CODE || '—') + ' · ' + (rosterMode() ? '사번 입장' : '직접 등록');
+  const warn = !ACTIVE_SET && !FIXED;
+  $('#noSess').classList.toggle('hidden', !warn);
+  if (warn) $('#noSess').innerHTML = '운영자가 아직 이 주소에 세션을 연결하지 않아 기본 세션(<b>main</b>)을 보고 있습니다. 운영자 화면에서 <b>이 세션을 지금 쓰는 세션으로 지정</b>을 눌러 주세요.';
+}
 
 function boot(code){
   CODE = code;
@@ -373,6 +389,7 @@ function pickDefault(subs, cri){
 
 function render(){
   applyReset();
+  paintSess();
   $('#hTitle').textContent = (D.config||{}).title || '평가 채점';
   if (!ME) { showReg(); return; }
   $('#hMe').textContent = ME.name + (ME.dept ? ' · ' + ME.dept : '') + (ME.position ? ' ' + ME.position : '');

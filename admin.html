@@ -122,6 +122,7 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
   <b>평가 운영</b>
   <span class="sub">admin</span>
   <span class="right">
+    <span id="build"></span>
     <span id="conn">연결 확인 중</span>
     <span id="who"></span>
     <button id="btnOut" class="ghost hidden" style="border-color:#5b6b76;color:#cfdae0;background:transparent">로그아웃</button>
@@ -130,6 +131,7 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
 
 <div class="wrap">
   <div id="dbWarn" class="banner hidden"></div>
+  <div id="linkWarn" class="banner warn hidden"></div>
 
   <!-- 로그인 -->
   <section id="loginPanel" class="panel">
@@ -350,6 +352,7 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
       싱가포르에서 만들었다면  https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app
    ═══════════════════════════════════════════════════════════════ */
 const DATABASE_URL = "https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app";
+const BUILD = "2026-09-17f";   /* 세 파일의 값이 같아야 최신입니다 */
 
 const firebaseConfig = {
   apiKey: "AIzaSyCXGmsExbOCnvxDZpXcL1A10FlKeGZjjUI",
@@ -408,6 +411,7 @@ const askText = (msg, value, o) => dialog(Object.assign({ title: '입력', msg, 
 function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),1800); }
 
 /* ── 연결 확인 ──────────────────────────────────────────── */
+document.getElementById('build').textContent = BUILD;
 let everConnected = false;
 db.ref('.info/connected').on('value', s => {
   const c = s.val() === true;
@@ -487,6 +491,11 @@ function paintActive(){
   b.className = 'pill ' + (on ? 'go' : 'stop');
   b.textContent = on ? '지금 쓰는 세션' : (ACTIVE ? '지금 쓰는 세션은 ' + ACTIVE : '지정된 세션 없음');
   $('#btnActivate').disabled = on;
+  const w = $('#linkWarn');
+  w.classList.toggle('hidden', on);
+  if (!on) w.innerHTML = '지금 편집 중인 세션 <b>' + esc(CODE) + '</b> 은(는) 심사위원·공개 화면과 연결되어 있지 않습니다. ' +
+    (ACTIVE ? '그 화면들은 <b>' + esc(ACTIVE) + '</b> 세션을 보고 있습니다. ' : '주소에 코드가 없는 접속은 기본 세션 <b>main</b> 으로 갑니다. ') +
+    '여기 설정을 반영하려면 위의 <b>이 세션을 지금 쓰는 세션으로 지정</b>을 누르세요.';
 }
 $('#btnActivate').onclick = () => db.ref('activeSession').set(CODE)
   .then(() => toast('심사위원·공개 화면이 이 세션에 연결됩니다'))
