@@ -218,8 +218,8 @@ setTimeout(() => { if (!ok) { $('#dbWarn').classList.remove('hidden'); $('#dbWar
    없으면 admin 에서 지정한 '지금 쓰는 세션'에 자동으로 붙습니다. */
 const FIXED = clean(new URLSearchParams(location.search).get('s'));
 let CODE = null, S = null, LK = null;
-let ME = null, MYSC = {}, SENT = {};
-let D = { config:{}, criteria:{}, subjects:{} };
+let ME = null, MYSC = {};
+let D = { config:{}, criteria:{}, subjects:{}, progress:{} };
 let draft = {};
 let SEL = null;   // 지금 보고 있는 평가 대상
 
@@ -236,8 +236,7 @@ function boot(code){
   LK = { me: 'sc.' + CODE + '.me', sc: 'sc.' + CODE + '.scores', sent: 'sc.' + CODE + '.sent', reset: 'sc.' + CODE + '.reset' };
   ME = lsGet(LK.me, null);
   MYSC = lsGet(LK.sc, {});
-  SENT = lsGet(LK.sent, {});
-  ['config','criteria','subjects'].forEach(p => S.child(p).on('value', s => { D[p] = s.val() || {}; render(); }));
+  ['config','criteria','subjects','progress'].forEach(p => S.child(p).on('value', s => { D[p] = s.val() || {}; render(); }));
   watchMe();
   render();
 }
@@ -257,7 +256,7 @@ function watchMe(){
 }
 function knockout(){
   [LK.me, LK.sc, LK.sent].forEach(k => localStorage.removeItem(k));
-  ME = null; MYSC = {}; SENT = {}; draft = {}; SEL = null;
+  ME = null; MYSC = {}; draft = {}; SEL = null;
   $('#kickNote').classList.remove('hidden');
   render();
   window.scrollTo(0,0);
@@ -318,16 +317,16 @@ $('#btnReset').onclick = async () => {
 /* ── 렌더 ── */
 function rosterMode(){ return (D.config||{}).joinMode !== 'open'; }
 
-/* 운영자가 채점을 초기화하면 이 기기에 남은 점수 표시도 함께 지웁니다.
-   개별 점수는 서버에서 되읽을 수 없는 구조라, 초기화 시각을 신호로 씁니다. */
+/* 운영자가 채점을 초기화하면 이 기기에 남은 점수 값도 함께 지웁니다.
+   제출 여부 자체는 서버 표식으로 판정하므로 초기화 즉시 사라집니다. */
 function applyReset(){
   if (!LK) return;
   const r = num((D.config||{}).resetAt, 0);
   if (!r) return;
   const seen = num(lsGet(LK.reset, 0), 0);
   if (r <= seen) return;
-  const had = Object.keys(MYSC).length || Object.keys(SENT).length;
-  MYSC = {}; SENT = {}; draft = {}; SEL = null;
+  const had = Object.keys(MYSC).length;
+  MYSC = {}; draft = {}; SEL = null;
   localStorage.removeItem(LK.sc);
   localStorage.removeItem(LK.sent);
   lsSet(LK.reset, r);
@@ -362,10 +361,10 @@ function dirty(sid, cri){
 }
 function pickDefault(subs, cri){
   const open = subs.filter(([,v]) => v.state === 'open');
-  const openUnsent = open.filter(([id]) => !SENT[id] || needsResubmit(id, cri));
+  const openUnsent = open.filter(([id]) => !sentOf(id) || needsResubmit(id, cri));
   if (openUnsent.length) return openUnsent[0][0];
   if (open.length) return open[open.length-1][0];
-  const missed = subs.filter(([id,v]) => v.state === 'closed' && !SENT[id]);
+  const missed = subs.filter(([id,v]) => v.state === 'closed' && !sentOf(id));
   if (missed.length) return missed[0][0];
   const closed = subs.filter(([,v]) => v.state === 'closed');
   if (closed.length) return closed[closed.length-1][0];
@@ -399,13 +398,13 @@ function render(){
     if (open.length) SEL = open[open.length-1][0];
   }
 
-  const sentCount = subs.filter(([id]) => SENT[id] && !needsResubmit(id, cri)).length;
+  const sentCount = subs.filter(([id]) => sentOf(id) && !needsResubmit(id, cri)).length;
   const sv = byId[SEL] || {};
   const idx = subs.findIndex(([id]) => id === SEL);
 
   /* 번호 버튼 */
   const chips = subs.map(([id,v], i) => {
-    const sent = !!SENT[id], stale = needsResubmit(id, cri);
+    const sent = sentOf(id), stale = needsResubmit(id, cri);
     const cls = ['chip'];
     if (v.state === 'ready') cls.push('ready');
     if (v.state === 'open') cls.push('open');
@@ -452,19 +451,26 @@ function syncDraft(cri){
     });
   });
 }
+/* 제출 여부는 서버의 제출 표식으로 판정합니다.
+   이름 없는 무작위 ID만 들어 있어서, 누가 몇 점을 줬는지는 여전히 알 수 없습니다.
+   운영자가 초기화하면 이 표식이 사라지므로 모든 기기에서 즉시 반영됩니다. */
+function sentOf(sid){ return !!((((D.progress||{})[sid]) || {})[(ME||{}).rid]); }
+/* 제출은 되어 있는데 점수 값이 이 기기에 없는 경우 (다른 기기에서 제출) */
+function noLocal(sid){ return sentOf(sid) && !MYSC[sid]; }
 /* 제출했지만 이후 문항이 추가되어 빠진 값이 있는 경우 */
 function needsResubmit(sid, cri){
-  if (!SENT[sid]) return false;
-  const mine = MYSC[sid] || {};
+  if (!sentOf(sid) || !MYSC[sid]) return false;
+  const mine = MYSC[sid];
   return cri.some(([cid]) => mine[cid] === undefined || mine[cid] === null);
 }
 
 function card(sid, sv, cri, maxTotal, editable){
   const stale = needsResubmit(sid, cri);
-  const sent = !!SENT[sid] && !stale;
+  const sent = sentOf(sid) && !stale;
+  const away = noLocal(sid);
   const mine = MYSC[sid] || {};
   const st = stale ? '다시 제출 필요'
-    : sent ? (editable ? '제출 완료 · 수정 가능' : '제출 완료')
+    : sent ? (away ? '제출 완료 (다른 기기)' : (editable ? '제출 완료 · 수정 가능' : '제출 완료'))
     : (editable ? '채점 가능' : '미제출 · 마감됨');
   const stc = stale ? '' : (sent ? 'done' : (editable ? 'go' : ''));
   const d = draft[sid] || (draft[sid] = {});
@@ -497,6 +503,7 @@ function card(sid, sv, cri, maxTotal, editable){
     '<h2>' + esc(sv.name) + (sv.desc ? ' · ' + esc(sv.desc) : '') + '<span class="st ' + stc + '">' + st + '</span></h2>' +
     '<div class="body">' +
       (stale ? '<div class="restale">제출 이후에 평가 문항이 바뀌었습니다. 비어 있는 문항을 채워 다시 제출해 주세요. 그전까지 이 제출은 평균에 반영되지 않습니다.</div>' : '') +
+      (away && !stale ? '<div class="restale">다른 기기에서 제출한 기록이 있습니다. 이 기기에는 점수가 남아 있지 않아 값이 비어 있습니다. 다시 매겨 제출하면 덮어씁니다.</div>' : '') +
       body +
       '<div class="totalrow"><span class="t">총점</span><span class="v" data-total>' + (done ? total : '—') + '</span><span class="m">/ ' + maxTotal + '</span></div>' +
       (editable
@@ -545,11 +552,13 @@ function submit(sid, cri, sec){
   });
   const btn = sec.querySelector('[data-submit]');
   btn.disabled = true; btn.textContent = '저장 중';
-  S.child('scores/' + sid + '/' + ME.rid).set({ v, total, at: Date.now() }).then(() => {
-    MYSC[sid] = v; SENT[sid] = true;
-    lsSet(LK.sc, MYSC); lsSet(LK.sent, SENT);
+  S.child('scores/' + sid + '/' + ME.rid).set({ v, total, at: Date.now() })
+   .then(() => S.child('progress/' + sid + '/' + ME.rid).set(Date.now()))
+   .then(() => {
+    MYSC[sid] = v;
+    lsSet(LK.sc, MYSC);
     toast('제출되었습니다');
-    const rest = subList().find(([id,sv]) => sv.state === 'open' && id !== sid && (!SENT[id] || needsResubmit(id, cri)));
+    const rest = subList().find(([id,sv]) => sv.state === 'open' && id !== sid && (!sentOf(id) || needsResubmit(id, cri)));
     if (rest) { SEL = rest[0]; window.scrollTo({ top: 0, behavior: 'auto' }); }
     render();
   }).catch(err => {

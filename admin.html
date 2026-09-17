@@ -526,6 +526,7 @@ function resetPatch(){
   /* 채점을 시작 전 상태로 되돌리는 공통 묶음 */
   const u = {
     scores: null,
+    progress: null,
     aggregate: null,
     screen: { mode: 'idle', ts: Date.now() },
     'config/allowEditClosed': true,
@@ -724,6 +725,7 @@ function renderSubjects(){
       subSig = '';
       S.child('subjects/' + k).remove();
       S.child('scores/' + k).remove();
+      S.child('progress/' + k).remove();
       S.child('aggregate/' + k).remove();
     });
   } else {
@@ -843,16 +845,17 @@ $('#mSave').onclick = () => {
     v[cid] = val; total += val;
   });
   if (miss) { notify('모든 문항에 점수를 입력하세요.'); return; }
-  S.child('scores/' + EDIT.sid + '/' + EDIT.rid)
-    .set({ v, total, at: EDIT.at, edited: true, editedAt: Date.now() })
+  S.update({ ['scores/' + EDIT.sid + '/' + EDIT.rid]: { v, total, at: EDIT.at, edited: true, editedAt: Date.now() },
+             ['progress/' + EDIT.sid + '/' + EDIT.rid]: Date.now() })
     .then(() => { closeEdit(); toast('점수를 수정했습니다'); })
     .catch(e => notify(failMsg('저장하지 못했습니다.', e), '저장 실패'));
 };
 $('#mDel').onclick = async () => {
   if (!EDIT) return;
   if (!await ask('이 심사위원의 이 대상 점수를 삭제합니다.', { title:'점수 삭제', ok:'삭제', danger:true })) return;
-  S.child('scores/' + EDIT.sid + '/' + EDIT.rid).remove()
-    .then(() => { closeEdit(); toast('삭제했습니다'); });
+  S.update({ ['scores/' + EDIT.sid + '/' + EDIT.rid]: null, ['progress/' + EDIT.sid + '/' + EDIT.rid]: null })
+    .then(() => { closeEdit(); toast('삭제했습니다'); })
+    .catch(e => notify(failMsg('삭제하지 못했습니다.', e), '삭제 실패'));
 };
 /* ── 명단 사전 등록 ─────────────────────────────────────
    사번을 키로 pass/{사번} 에 입장 정보를 둡니다. 정확한 사번을 알아야
@@ -912,7 +915,7 @@ function renderRaters(){
     u['roster/' + rid] = null;
     u['revoked/' + rid] = true;
     if (emp) u['pass/' + emp] = null;
-    subList().forEach(([sid]) => u['scores/' + sid + '/' + rid] = null);
+    subList().forEach(([sid]) => { u['scores/' + sid + '/' + rid] = null; u['progress/' + sid + '/' + rid] = null; });
     S.update(u).then(() => toast('삭제했습니다'))
       .catch(e => notify(failMsg('삭제하지 못했습니다.', e), '삭제 실패'));
   });
