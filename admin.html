@@ -273,6 +273,7 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
             <button id="btnBulkPaste" class="primary">명단 붙여넣기로 등록</button>
             <span style="color:var(--ink-3);font-size:12px">사전 등록해 두면 심사위원은 사번만 입력하고 들어옵니다</span>
           </div>
+          <div id="rosterWarn" class="banner warn hidden" style="margin-bottom:12px"></div>
           <div id="pasteBox" class="hidden" style="margin-bottom:14px">
             <textarea id="pasteArea" rows="7" placeholder="한 줄에 한 명씩, 쉼표 또는 탭으로 구분
 성명, 사번, 소속, 직위
@@ -352,7 +353,7 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
       싱가포르에서 만들었다면  https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app
    ═══════════════════════════════════════════════════════════════ */
 const DATABASE_URL = "https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app";
-const BUILD = "2026-09-17f";   /* 세 파일의 값이 같아야 최신입니다 */
+const BUILD = "2026-09-17g";   /* 세 파일의 값이 같아야 최신입니다 */
 
 const firebaseConfig = {
   apiKey: "AIzaSyCXGmsExbOCnvxDZpXcL1A10FlKeGZjjUI",
@@ -372,13 +373,16 @@ let CODE = localStorage.getItem('sc.code') || 'main';
 let S = null, refs = [];
 let D = { config:{}, criteria:{}, subjects:{}, raters:{}, scores:{}, screen:{}, roster:{}, pass:{} };
 let authed = false, aggTimer = null;
-let ACTIVE = null, gotRaters = false, gotRoster = false;
+let ACTIVE = null, gotRaters = false, gotRoster = false, gotPass = false;
 let ratSig = '';
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = (v,d=0) => { const n = Number(v); return isFinite(n) ? n : d; };
 const clean = c => String(c||'').trim().replace(/[.#$\[\]\/\s]/g,'');
+/* 사번을 입장 키로 바꿉니다. index.html 의 같은 함수와 규칙이 일치해야 합니다.
+   공백·하이픈 등은 버리고 영문은 대문자로 맞춥니다. */
+const empKey = v => String(v||'').toUpperCase().replace(/[^0-9A-Z가-힣]/g,'');
 /* ── 화면 안 대화상자 (브라우저 기본 창을 쓰지 않습니다) ── */
 let dlgRes = null;
 function dialog(o){
@@ -466,7 +470,7 @@ function openSession(code){
   S = db.ref('sessions/' + CODE);
   D = { config:{}, criteria:{}, subjects:{}, raters:{}, scores:{}, screen:{}, roster:{}, pass:{} };
   ratSig = '';
-  gotRaters = gotRoster = false;
+  gotRaters = gotRoster = gotPass = false;
   const base = location.href.replace(/[^\/]*$/, '');
   $('#linkIndex').innerHTML = esc(base + 'index.html') + '<br><span style="color:var(--ink-3)">이 세션 고정: ' + esc(base + 'index.html?s=' + CODE) + '</span>';
   $('#linkScreen').innerHTML = esc(base + 'screen.html') + '<br><span style="color:var(--ink-3)">이 세션 고정: ' + esc(base + 'screen.html?s=' + CODE) + '</span>';
@@ -476,8 +480,8 @@ function openSession(code){
   bind('config',   () => { renderSetup(); renderSubjects(); renderRaters(); renderScreenCtl(); schedule(); });
   bind('criteria', () => { renderCriteria(); renderMatrix(); renderRaters(); renderResults(); schedule(); });
   bind('subjects', () => { renderSubjects(); renderMatrix(); renderRaters(); renderResults(); renderScreenCtl(); schedule(); });
-  bind('raters',   () => { gotRaters = true; renderRaters(); renderMatrix(); syncRoster(); });
-  bind('pass',     () => {});
+  bind('raters',   () => { gotRaters = true; renderRaters(); renderMatrix(); syncRoster(); syncPass(); });
+  bind('pass',     () => { gotPass = true; syncPass(); });
   bind('roster',   () => { gotRoster = true; syncRoster(); renderRaters(); renderMatrix(); renderResults(); });
   bind('scores',   () => { renderCriteria(); renderMatrix(); renderRaters(); renderResults(); schedule(); });
   bind('screen',   () => renderScreenCtl());
@@ -637,6 +641,35 @@ $$('input[name=join]').forEach(r => r.onchange = () => { if (r.checked) S.child(
 $$('input[name=mode]').forEach(r => r.onchange = () => { if (r.checked) S.child('config/mode').set(r.value); });
 $('#cEdit').onchange = e => S.child('config/allowEditClosed').set(e.target.checked);
 function enteredCount(){ return Object.keys(D.roster || {}).length; }
+
+/* ── 입장 키 자동 맞춤 ──
+   명단(raters)을 기준으로 pass 를 항상 다시 맞춥니다.
+   예전에 자유 등록으로 들어왔거나 입장 키 기능 이전에 만들어진 사람도 이걸로 복구됩니다. */
+function syncPass(){
+  if (!gotRaters || !gotPass || !S) return;
+  const rs = D.raters || {}, ps = D.pass || {}, u = {}, want = {}, dup = [];
+  Object.entries(rs).forEach(([rid, v]) => {
+    const k = empKey(v.empno);
+    if (!k) return;
+    if (want[k]) { dup.push(k); return; }
+    want[k] = rid;
+    const cur = ps[k];
+    const next = { rid, name: v.name || '', dept: v.dept || '', position: v.position || '' };
+    if (!cur || cur.rid !== next.rid || cur.name !== next.name || cur.dept !== next.dept || cur.position !== next.position) {
+      u['pass/' + k] = next;
+    }
+  });
+  Object.keys(ps).forEach(k => { if (!want[k]) u['pass/' + k] = null; });
+  if (Object.keys(u).length) S.update(u).catch(e => console.warn('입장 키 동기화 실패', e));
+  const noKey = Object.values(rs).filter(v => !empKey(v.empno)).length;
+  const w = $('#rosterWarn');
+  if (!w) return;
+  const msgs = [];
+  if (dup.length) msgs.push('사번이 겹치는 사람이 있습니다 (' + dup.join(', ') + '). 한 명만 입장할 수 있으니 수정하세요.');
+  if (noKey) msgs.push('사번이 비어 있는 사람이 ' + noKey + '명 있습니다. 사번 입장 방식에서는 들어올 수 없습니다.');
+  w.classList.toggle('hidden', !msgs.length);
+  w.innerHTML = msgs.join('<br>');
+}
 function syncRoster(){
   const rs = D.raters || {};
   $('#raterN').innerHTML = '명단 <b>' + Object.keys(rs).length + '</b>명 · 입장 <b>' + enteredCount() + '</b>명';
@@ -876,11 +909,11 @@ $('#btnPasteCancel').onclick = () => $('#pasteBox').classList.add('hidden');
 $('#btnPasteGo').onclick = () => {
   const lines = $('#pasteArea').value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (!lines.length) { $('#pasteMsg').textContent = '내용이 비어 있습니다.'; return; }
-  const exist = new Set(Object.values(D.raters || {}).map(r => clean(r.empno)).filter(Boolean));
+  const exist = new Set(Object.values(D.raters || {}).map(r => empKey(r.empno)).filter(Boolean));
   const u = {}; let ok = 0; const skip = [];
   lines.forEach(line => {
     const f = line.split(/[\t,]/).map(x => x.trim());
-    const name = f[0] || '', empno = clean(f[1] || ''), dept = f[2] || '', position = f[3] || '';
+    const name = f[0] || '', empno = empKey(f[1] || ''), dept = f[2] || '', position = f[3] || '';
     if (!name) { skip.push(line + ' (성명 없음)'); return; }
     if (!empno) { skip.push(name + ' (사번 없음)'); return; }
     if (exist.has(empno)) { skip.push(name + ' (사번 중복)'); return; }
@@ -888,7 +921,6 @@ $('#btnPasteGo').onclick = () => {
     const rid = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
     const at = Date.now();
     u['raters/' + rid] = { name, empno, dept, position, at };
-    u['pass/' + empno] = { rid, name, dept, position };
     ok++;
   });
   if (!ok) { $('#pasteMsg').textContent = '등록된 사람이 없습니다. ' + skip.join(' / '); return; }
@@ -940,22 +972,18 @@ function renderRaters(){
       const cur = (D.raters || {})[rid] || {};
       const u = {};
       if (f === 'empno') {
-        const oldE = clean(cur.empno), newE = clean(e.target.value);
+        const newE = empKey(e.target.value);
         e.target.value = newE;
-        if (newE && Object.entries(D.raters || {}).some(([k,v]) => k !== rid && clean(v.empno) === newE)) {
+        if (newE && Object.entries(D.raters || {}).some(([k,v]) => k !== rid && empKey(v.empno) === newE)) {
           e.target.value = cur.empno || '';
           await notify('이미 다른 심사위원이 쓰고 있는 사번입니다.', '사번 중복');
           return;
         }
         u['raters/' + rid + '/empno'] = newE;
-        if (oldE && oldE !== newE) u['pass/' + oldE] = null;
-        if (newE) u['pass/' + newE] = { rid, name: cur.name || '', dept: cur.dept || '', position: cur.position || '' };
       } else {
         const val = e.target.value.trim();
         if (f === 'name' && !val) { e.target.value = cur.name || ''; await notify('성명은 비워 둘 수 없습니다.'); return; }
         u['raters/' + rid + '/' + f] = val;
-        const emp = clean(cur.empno);
-        if (emp) u['pass/' + emp + '/' + f] = val;
       }
       S.update(u).then(() => toast('수정했습니다'))
         .catch(err => notify(failMsg('수정하지 못했습니다.', err), '수정 실패'));
@@ -965,7 +993,7 @@ function renderRaters(){
       const rid = e.target.closest('tr').dataset.rid;
       if (!await ask('이 심사위원을 명단에서 지우고 제출한 점수도 모두 삭제합니다. 접속 중이면 곧바로 입장 화면으로 돌아갑니다.', { title:'심사위원 삭제', ok:'삭제', danger:true })) return;
       const u = {};
-      const emp = clean((D.raters[rid]||{}).empno);
+      const emp = empKey((D.raters[rid]||{}).empno);
       u['raters/' + rid] = null;
       u['roster/' + rid] = null;
       u['revoked/' + rid] = true;
@@ -980,7 +1008,7 @@ function renderRaters(){
   rats.forEach(([rid,v]) => {
     const tr = tb.querySelector(`tr[data-rid="${rid}"]`); if (!tr) return;
     const inRoom = !!(D.roster||{})[rid];
-    const noEmp = (D.config||{}).joinMode !== 'open' && !clean(v.empno);
+    const noEmp = (D.config||{}).joinMode !== 'open' && !empKey(v.empno);
     tr.classList.toggle('dim', !inRoom);
     tr.querySelector('[data-c=room]').innerHTML = noEmp
       ? '<span class="pill stop">사번 없음</span>'

@@ -172,7 +172,7 @@ input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--ink);height:26px}
    Firebase 콘솔 > Realtime Database 화면 맨 위 주소를 그대로 넣으세요.
    ══════════════════════════════════════════════════════════════ */
 const DATABASE_URL = "https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app";
-const BUILD = "2026-09-17f";   /* 화면 아래에 표시됩니다. 세 파일의 값이 같은지로 갱신 여부를 확인하세요 */
+const BUILD = "2026-09-17g";   /* 화면 아래에 표시됩니다. 세 파일의 값이 같은지로 갱신 여부를 확인하세요 */
 
 const firebaseConfig = {
   apiKey: "AIzaSyCXGmsExbOCnvxDZpXcL1A10FlKeGZjjUI",
@@ -190,6 +190,8 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = (v,d=0) => { const n = Number(v); return isFinite(n) ? n : d; };
 const clean = c => String(c||'').trim().replace(/[.#$\[\]\/\s]/g,'');
+/* 사번을 입장 키로 바꿉니다. admin.html 의 같은 함수와 규칙이 일치해야 합니다. */
+const empKey = v => String(v||'').toUpperCase().replace(/[^0-9A-Z가-힣]/g,'');
 /* ── 화면 안 대화상자 (브라우저 기본 창을 쓰지 않습니다) ── */
 let dlgRes = null;
 function dialog(o){
@@ -283,14 +285,17 @@ function knockout(){
 function regErr(msg){ const b = $('#regErr'); b.classList.remove('hidden'); b.textContent = msg; }
 $('#btnJoin').onclick = () => {
   if (!S) return;
-  const key = clean($('#jNo').value);
+  const key = empKey($('#jNo').value);
   if (!key) { regErr('사번을 입력해 주세요.'); $('#jNo').focus(); return; }
   $('#regErr').classList.add('hidden');
   const btn = $('#btnJoin'); btn.disabled = true; btn.textContent = '확인 중';
   S.child('pass/' + key).once('value').then(sn => {
     const p = sn.val();
     btn.disabled = false; btn.textContent = '입장';
-    if (!p || !p.rid) { regErr('명단에 없는 사번입니다. 운영자에게 문의해 주세요.'); return; }
+    if (!p || !p.rid) {
+      regErr('명단에 없는 사번입니다. 운영자에게 문의해 주세요.  [세션 ' + CODE + ' · 조회한 사번 ' + key + ']');
+      return;
+    }
     ME = { rid: p.rid, name: p.name || '', dept: p.dept || '', position: p.position || '', empno: key, at: Date.now() };
     lsSet(LK.me, ME);
     S.child('roster/' + p.rid).set(ME.at).catch(()=>{});   /* 실제 입장한 사람만 분모에 들어갑니다 */
