@@ -370,6 +370,7 @@ let S = null, refs = [];
 let D = { config:{}, criteria:{}, subjects:{}, raters:{}, scores:{}, screen:{}, roster:{}, pass:{} };
 let authed = false, aggTimer = null;
 let ACTIVE = null, gotRaters = false, gotRoster = false;
+let ratSig = '';
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -460,6 +461,7 @@ function openSession(code){
   $('#codeInput').value = CODE;
   S = db.ref('sessions/' + CODE);
   D = { config:{}, criteria:{}, subjects:{}, raters:{}, scores:{}, screen:{}, roster:{}, pass:{} };
+  ratSig = '';
   gotRaters = gotRoster = false;
   const base = location.href.replace(/[^\/]*$/, '');
   $('#linkIndex').innerHTML = esc(base + 'index.html') + '<br><span style="color:var(--ink-3)">이 세션 고정: ' + esc(base + 'index.html?s=' + CODE) + '</span>';
@@ -468,12 +470,12 @@ function openSession(code){
   paintActive();
 
   bind('config',   () => { renderSetup(); renderSubjects(); renderRaters(); renderScreenCtl(); schedule(); });
-  bind('criteria', () => { renderCriteria(); renderMatrix(); renderResults(); schedule(); });
-  bind('subjects', () => { renderSubjects(); renderMatrix(); renderResults(); renderScreenCtl(); schedule(); });
+  bind('criteria', () => { renderCriteria(); renderMatrix(); renderRaters(); renderResults(); schedule(); });
+  bind('subjects', () => { renderSubjects(); renderMatrix(); renderRaters(); renderResults(); renderScreenCtl(); schedule(); });
   bind('raters',   () => { gotRaters = true; renderRaters(); renderMatrix(); syncRoster(); });
   bind('pass',     () => {});
   bind('roster',   () => { gotRoster = true; syncRoster(); renderRaters(); renderMatrix(); renderResults(); });
-  bind('scores',   () => { renderCriteria(); renderMatrix(); renderResults(); schedule(); });
+  bind('scores',   () => { renderCriteria(); renderMatrix(); renderRaters(); renderResults(); schedule(); });
   bind('screen',   () => renderScreenCtl());
 }
 
@@ -890,34 +892,98 @@ $('#btnPasteGo').onclick = () => {
 
 function renderRaters(){
   const rats = raterList();
-  const roster = (D.config||{}).joinMode === 'open' ? '누구나 신상 입력 후 입장' : '사전 등록 명단만 입장';
-  $('#rosterNote').textContent = '명단 ' + rats.length + '명 · 입장 ' + enteredCount() + '명 · ' + roster;
+  const mode = (D.config||{}).joinMode === 'open' ? '누구나 신상 입력 후 입장' : '사전 등록 명단만 입장';
+  $('#rosterNote').textContent = '명단 ' + rats.length + '명 · 입장 ' + enteredCount() + '명 · ' + mode;
   const tb = $('#raterTable').querySelector('tbody');
-  if (!rats.length) { tb.innerHTML = '<tr><td style="color:var(--ink-3)">아직 등록한 심사위원이 없습니다. 위에서 명단을 붙여넣어 등록하세요.</td></tr>'; return; }
+  if (!rats.length) {
+    ratSig = '';
+    tb.innerHTML = '<tr><td style="color:var(--ink-3)">아직 등록한 심사위원이 없습니다. 위에서 명단을 붙여넣어 등록하세요.</td></tr>';
+    return;
+  }
   const totalSubs = subList().length;
-  tb.innerHTML = '<tr><th style="width:36px">#</th><th>성명</th><th>사번</th><th>소속</th><th>직위</th><th style="width:70px">입장</th><th class="n" style="width:80px">제출</th><th style="width:60px"></th></tr>' +
-    rats.map(([rid,v],i) => {
-      const done = subList().filter(([sid]) => ((D.scores||{})[sid]||{})[rid]).length;
-      const inRoom = !!(D.roster||{})[rid];
-      return `<tr data-rid="${rid}" class="${inRoom?'':'dim'}">
-        <td class="n">${i+1}</td><td>${esc(v.name)}</td><td class="n">${esc(v.empno||'')}</td>
-        <td>${esc(v.dept||'')}</td><td>${esc(v.position||'')}</td>
-        <td><span class="pill ${inRoom?'go':''}">${inRoom?'입장':'미입장'}</span></td>
-        <td class="n">${done}/${totalSubs}</td>
-        <td><button class="danger" data-del="1">삭제</button></td></tr>`;
-    }).join('');
-  tb.querySelectorAll('button[data-del]').forEach(b => b.onclick = async e => {
-    const rid = e.target.closest('tr').dataset.rid;
-    if (!await ask('이 심사위원을 명단에서 지우고 제출한 점수도 모두 삭제합니다. 접속 중이면 곧바로 입장 화면으로 돌아갑니다.', { title:'심사위원 삭제', ok:'삭제', danger:true })) return;
-    const u = {};
-    const emp = clean((D.raters[rid]||{}).empno);
-    u['raters/' + rid] = null;
-    u['roster/' + rid] = null;
-    u['revoked/' + rid] = true;
-    if (emp) u['pass/' + emp] = null;
-    subList().forEach(([sid]) => { u['scores/' + sid + '/' + rid] = null; u['progress/' + sid + '/' + rid] = null; });
-    S.update(u).then(() => toast('삭제했습니다'))
-      .catch(e => notify(failMsg('삭제하지 못했습니다.', e), '삭제 실패'));
+  const { detail } = computeAll();
+  const stat = rid => {
+    let done = 0, stale = 0;
+    subList().forEach(([sid]) => {
+      const d = (detail[sid] || {})[rid];
+      if (!d) return;
+      if (d.complete) done++; else stale++;
+    });
+    return { done, stale };
+  };
+
+  const sg = rats.map(([k]) => k).join(',');
+  if (sg !== ratSig) {
+    ratSig = sg;
+    tb.innerHTML = '<tr><th style="width:34px">#</th><th style="min-width:90px">성명</th><th style="min-width:100px">사번</th><th style="min-width:110px">소속</th><th style="min-width:90px">직위</th><th style="width:66px">입장</th><th class="n" style="width:86px">제출</th><th style="width:56px"></th></tr>' +
+      rats.map(([rid,v],i) => `<tr data-rid="${rid}">
+        <td class="n">${i+1}</td>
+        <td><input type="text" data-f="name" value="${esc(v.name)}" style="width:100%"></td>
+        <td><input type="text" data-f="empno" value="${esc(v.empno||'')}" style="width:100%;font-family:var(--mono)" inputmode="numeric"></td>
+        <td><input type="text" data-f="dept" value="${esc(v.dept||'')}" style="width:100%"></td>
+        <td><input type="text" data-f="position" value="${esc(v.position||'')}" style="width:100%"></td>
+        <td data-c="room"></td>
+        <td class="n" data-c="done"></td>
+        <td><button class="danger" data-del="1">삭제</button></td></tr>`).join('');
+
+    tb.querySelectorAll('input[data-f]').forEach(inp => inp.onchange = async e => {
+      const rid = e.target.closest('tr').dataset.rid, f = e.target.dataset.f;
+      const cur = (D.raters || {})[rid] || {};
+      const u = {};
+      if (f === 'empno') {
+        const oldE = clean(cur.empno), newE = clean(e.target.value);
+        e.target.value = newE;
+        if (newE && Object.entries(D.raters || {}).some(([k,v]) => k !== rid && clean(v.empno) === newE)) {
+          e.target.value = cur.empno || '';
+          await notify('이미 다른 심사위원이 쓰고 있는 사번입니다.', '사번 중복');
+          return;
+        }
+        u['raters/' + rid + '/empno'] = newE;
+        if (oldE && oldE !== newE) u['pass/' + oldE] = null;
+        if (newE) u['pass/' + newE] = { rid, name: cur.name || '', dept: cur.dept || '', position: cur.position || '' };
+      } else {
+        const val = e.target.value.trim();
+        if (f === 'name' && !val) { e.target.value = cur.name || ''; await notify('성명은 비워 둘 수 없습니다.'); return; }
+        u['raters/' + rid + '/' + f] = val;
+        const emp = clean(cur.empno);
+        if (emp) u['pass/' + emp + '/' + f] = val;
+      }
+      S.update(u).then(() => toast('수정했습니다'))
+        .catch(err => notify(failMsg('수정하지 못했습니다.', err), '수정 실패'));
+    });
+
+    tb.querySelectorAll('button[data-del]').forEach(b => b.onclick = async e => {
+      const rid = e.target.closest('tr').dataset.rid;
+      if (!await ask('이 심사위원을 명단에서 지우고 제출한 점수도 모두 삭제합니다. 접속 중이면 곧바로 입장 화면으로 돌아갑니다.', { title:'심사위원 삭제', ok:'삭제', danger:true })) return;
+      const u = {};
+      const emp = clean((D.raters[rid]||{}).empno);
+      u['raters/' + rid] = null;
+      u['roster/' + rid] = null;
+      u['revoked/' + rid] = true;
+      if (emp) u['pass/' + emp] = null;
+      subList().forEach(([sid]) => { u['scores/' + sid + '/' + rid] = null; u['progress/' + sid + '/' + rid] = null; });
+      S.update(u).then(() => toast('삭제했습니다'))
+        .catch(err => notify(failMsg('삭제하지 못했습니다.', err), '삭제 실패'));
+    });
+  }
+
+  /* 값만 바뀐 경우: 입력 칸은 건드리지 않고 상태 칸만 갱신 */
+  rats.forEach(([rid,v]) => {
+    const tr = tb.querySelector(`tr[data-rid="${rid}"]`); if (!tr) return;
+    const inRoom = !!(D.roster||{})[rid];
+    const noEmp = (D.config||{}).joinMode !== 'open' && !clean(v.empno);
+    tr.classList.toggle('dim', !inRoom);
+    tr.querySelector('[data-c=room]').innerHTML = noEmp
+      ? '<span class="pill stop">사번 없음</span>'
+      : `<span class="pill ${inRoom?'go':''}">${inRoom?'입장':'미입장'}</span>`;
+    const st = stat(rid);
+    tr.querySelector('[data-c=done]').innerHTML = st.done + '/' + totalSubs +
+      (st.stale ? ` <span style="color:#7a5a05" title="문항이 바뀌어 재제출이 필요한 건">!${st.stale}</span>` : '');
+    Array.from(tr.querySelectorAll('input[data-f]')).forEach(inp => {
+      if (inp === document.activeElement) return;
+      const want = inp.dataset.f === 'name' ? (v.name||'') : (v[inp.dataset.f] || '');
+      if (inp.value !== want) inp.value = want;
+    });
   });
 }
 

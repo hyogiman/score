@@ -569,6 +569,29 @@ function submit(sid, cri, sec){
   });
 }
 
+/* ── 뒤로 가기로 채점 화면이 닫히지 않게 ──
+   안드로이드 뒤로 버튼·제스처, iOS 스와이프 모두 popstate 로 들어옵니다.
+   눌리면 즉시 원위치시키고 화면 안 대화상자로 확인을 받습니다. */
+let leaving = false, backAsking = false;
+function armBack(){ try { history.pushState({ sc: 1 }, ''); } catch(e) {} }
+function leaveNow(){
+  leaving = true;
+  history.go(-2);
+  /* 이전 페이지가 없어 이동이 일어나지 않으면 덫을 다시 놓습니다 */
+  setTimeout(() => { if (leaving) { leaving = false; armBack(); } }, 600);
+}
+try { history.replaceState({ sc: 0 }, ''); } catch(e) {}
+armBack();
+window.addEventListener('popstate', async () => {
+  if (leaving || backAsking) return;
+  armBack();
+  if (!ME) { leaveNow(); return; }
+  backAsking = true;
+  const go = await ask('채점 화면에서 나가시겠습니까?<br>이미 제출한 점수는 그대로 남습니다.', { title: '나가기', ok: '나가기', danger: true });
+  backAsking = false;
+  if (go) leaveNow();
+});
+
 $('#dlgOk').onclick = () => dlgClose(true);
 $('#dlgCancel').onclick = () => dlgClose(null);
 $('#dlg').onclick = e => { if (e.target.id === 'dlg') dlgClose(null); };
