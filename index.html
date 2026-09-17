@@ -111,7 +111,7 @@ input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--ink);height:26px}
 <div class="scale"></div>
 <header>
   <b id="hTitle">평가 채점</b>
-  <div class="me"><span id="hMe">—</span><button id="btnReset" class="hidden">등록 정보 지우기</button></div>
+  <div class="me"><span id="hMe">—</span><button id="btnReset" class="hidden">나가기</button></div>
 </header>
 
 <div class="wrap">
@@ -120,17 +120,25 @@ input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--ink);height:26px}
 
   <!-- 등록 -->
   <section id="reg" class="panel hidden">
-    <h2>심사위원 등록</h2>
+    <h2 id="regTitle">심사위원 입장</h2>
     <div class="body">
-      <p style="margin:0 0 14px;color:var(--ink-2);font-size:13px">공개 화면에는 평균만 표시되고, 누가 몇 점을 주었는지는 나오지 않습니다. 등록 정보는 운영자 확인용입니다.</p>
-      <div style="display:flex;flex-direction:column;gap:10px">
+      <p id="regHint" style="margin:0 0 14px;color:var(--ink-2);font-size:13px">공개 화면에는 평균만 표시되고, 누가 몇 점을 주었는지는 나오지 않습니다.</p>
+
+      <div id="regRoster">
+        <div style="font-size:12.5px;color:var(--ink-2);margin-bottom:4px">사번</div>
+        <input type="text" id="jNo" inputmode="numeric" autocomplete="off" placeholder="사번을 입력하세요">
+        <button class="primary" id="btnJoin" style="margin-top:14px">입장</button>
+      </div>
+
+      <div id="regOpen" class="hidden" style="display:flex;flex-direction:column;gap:10px">
         <div><div style="font-size:12.5px;color:var(--ink-2);margin-bottom:4px">성명</div><input type="text" id="rName" autocomplete="name"></div>
         <div><div style="font-size:12.5px;color:var(--ink-2);margin-bottom:4px">사번</div><input type="text" id="rNo" inputmode="numeric" autocomplete="off"></div>
         <div><div style="font-size:12.5px;color:var(--ink-2);margin-bottom:4px">소속</div><input type="text" id="rDept" autocomplete="organization"></div>
         <div><div style="font-size:12.5px;color:var(--ink-2);margin-bottom:4px">직위</div><input type="text" id="rPos" autocomplete="organization-title"></div>
+        <button class="primary" id="btnReg" style="margin-top:4px">등록하고 시작하기</button>
       </div>
+
       <div id="regErr" class="banner hidden" style="margin:12px 0 0"></div>
-      <button class="primary" id="btnReg" style="margin-top:14px">등록하고 시작하기</button>
     </div>
   </section>
 
@@ -213,7 +221,7 @@ function watchMe(){
   if (!ME || !ME.rid) return;
   S.child('revoked/' + ME.rid).on('value', s => { if (s.val()) knockout(); });
   S.child('revoked/' + ME.rid).once('value').then(s => {
-    if (!s.val()) S.child('roster/' + ME.rid).set(num(ME.at, Date.now())).catch(()=>{});
+    if (!s.val() && !rosterMode()) S.child('roster/' + ME.rid).set(num(ME.at, Date.now())).catch(()=>{});
   }).catch(()=>{});
 }
 function knockout(){
@@ -224,7 +232,30 @@ function knockout(){
   window.scrollTo(0,0);
 }
 
-/* ── 등록 ── */
+/* ── 사번으로 입장 (사전 등록 방식) ──
+   pass/{사번} 은 정확한 사번을 알아야 그 한 칸만 읽힙니다. 명단 전체 조회는 막혀 있습니다. */
+function regErr(msg){ const b = $('#regErr'); b.classList.remove('hidden'); b.textContent = msg; }
+$('#btnJoin').onclick = () => {
+  if (!S) return;
+  const key = clean($('#jNo').value);
+  if (!key) { regErr('사번을 입력해 주세요.'); $('#jNo').focus(); return; }
+  $('#regErr').classList.add('hidden');
+  const btn = $('#btnJoin'); btn.disabled = true; btn.textContent = '확인 중';
+  S.child('pass/' + key).once('value').then(sn => {
+    const p = sn.val();
+    btn.disabled = false; btn.textContent = '입장';
+    if (!p || !p.rid) { regErr('명단에 없는 사번입니다. 운영자에게 문의해 주세요.'); return; }
+    ME = { rid: p.rid, name: p.name || '', dept: p.dept || '', position: p.position || '', empno: key, at: Date.now() };
+    lsSet(LK.me, ME);
+    $('#kickNote').classList.add('hidden');
+    $('#reg').classList.add('hidden');
+    watchMe(); render();
+    toast((p.name || '') + '님, 입장했습니다');
+  }).catch(() => { btn.disabled = false; btn.textContent = '입장'; regErr('조회하지 못했습니다. 잠시 후 다시 시도해 주세요.'); });
+};
+$('#jNo').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnJoin').click(); });
+
+/* ── 직접 등록 (자유 입장 방식) ── */
 $('#btnReg').onclick = () => {
   if (!S) return;
   const name = $('#rName').value.trim();
@@ -247,18 +278,26 @@ $('#btnReg').onclick = () => {
   });
 };
 $('#btnReset').onclick = () => {
-  if (!confirm('이 기기에 저장된 등록 정보와 내가 준 점수 기록을 지웁니다. 서버에 제출한 점수는 그대로 남습니다.')) return;
+  if (!confirm('이 기기에서 나갑니다. 서버에 제출한 점수는 그대로 남고, 같은 사번으로 다시 들어오면 이어서 볼 수 있습니다.')) return;
   [LK.me, LK.sc, LK.sent].forEach(k => localStorage.removeItem(k));
   location.reload();
 };
 
 /* ── 렌더 ── */
+function rosterMode(){ return (D.config||{}).joinMode !== 'open'; }
 function showReg(){
   $('#reg').classList.remove('hidden');
   $('#board').classList.add('hidden');
   $('#nav').classList.add('hidden');
   $('#btnReset').classList.add('hidden');
-  $('#hMe').textContent = CODE ? '등록 전' : '연결 중';
+  $('#hMe').textContent = CODE ? '입장 전' : '연결 중';
+  const r = rosterMode();
+  $('#regRoster').classList.toggle('hidden', !r);
+  $('#regOpen').classList.toggle('hidden', r);
+  $('#regTitle').textContent = r ? '심사위원 입장' : '심사위원 등록';
+  $('#regHint').textContent = r
+    ? '운영자가 미리 등록한 명단으로 입장합니다. 사번을 입력해 주세요. 공개 화면에는 평균만 표시되고 누가 몇 점을 주었는지는 나오지 않습니다.'
+    : '공개 화면에는 평균만 표시되고, 누가 몇 점을 주었는지는 나오지 않습니다. 등록 정보는 운영자 확인용입니다.';
 }
 /* 화면에는 한 번에 한 대상만 띄우고, 위쪽 번호 버튼으로 옮겨 다닙니다. */
 function editableOf(sv){

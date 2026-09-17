@@ -80,6 +80,22 @@ tr.dim td{color:var(--ink-3)}
 .matrix td.cell{text-align:center;padding:4px;font-family:var(--mono);font-size:12px}
 .matrix td.cell.miss{background:#fbeef0;color:var(--stop)}
 .matrix td.cell.stale{background:#fdf6e6;color:#7a5a05;font-weight:600}
+.matrix td.cell{cursor:pointer}
+.matrix td.cell:hover{outline:2px solid var(--go);outline-offset:-2px}
+.matrix td.cell.ed::before{content:"\270E ";color:var(--hold)}
+textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px;width:100%;color:var(--ink)}
+.danger-zone{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}
+.modal{position:fixed;inset:0;background:rgba(22,33,43,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+.mbox{background:#fff;border:1px solid var(--ink);max-width:470px;width:100%;max-height:88vh;overflow:auto}
+.mbox h3{margin:0;background:var(--ink);color:#eef3f6;font-size:13px;padding:8px 12px;font-weight:600}
+.mbody{padding:14px}
+.mrow{display:grid;grid-template-columns:1fr 96px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px dotted var(--line-2)}
+.mrow .lb{font-size:13.5px}
+.mrow .lb small{display:block;color:var(--ink-3);font-family:var(--mono);font-size:11px}
+.mrow input{width:100%}
+.mtot{display:flex;align-items:baseline;gap:8px;border-top:2px solid var(--ink);margin-top:10px;padding-top:10px;font-size:13px;color:var(--ink-2)}
+.mtot b{margin-left:auto;font-family:var(--mono);font-size:22px;color:var(--ink)}
+.mfoot{display:flex;gap:8px;align-items:center;padding:12px 14px;border-top:1px solid var(--line-2)}
 .matrix th.vert{font-size:11px;line-height:1.2;min-width:54px;max-width:70px;word-break:keep-all}
 
 .bar{height:9px;background:var(--panel-2);border:1px solid var(--line-2);position:relative}
@@ -141,6 +157,11 @@ tr.dim td{color:var(--ink-3)}
           <select id="sessList" style="min-width:180px"><option value="">— 지난 세션 —</option></select>
         </div>
         <div class="row" style="margin-top:10px">
+          <span style="color:var(--ink-2)">세션 이름</span>
+          <input type="text" id="sessName" style="flex:1;min-width:210px" placeholder="예: 2026 상반기 개선과제 발표 심사">
+          <button id="btnRename" class="ghost">이름 저장</button>
+        </div>
+        <div class="row" style="margin-top:10px">
           <span id="activeBadge" class="pill">확인 중</span>
           <button id="btnActivate" class="ghost">이 세션을 지금 쓰는 세션으로 지정</button>
           <span style="color:var(--ink-2);font-size:12px">심사위원·공개 화면은 주소에 코드가 없으면 여기서 지정한 세션에 붙습니다</span>
@@ -154,6 +175,13 @@ tr.dim td{color:var(--ink-3)}
             <div style="font-size:12px;color:var(--ink-2);margin-bottom:4px">공개 화면 주소</div>
             <div class="linkbox" id="linkScreen">—</div>
           </div>
+        </div>
+        <div class="row danger-zone">
+          <button id="btnDup" class="ghost">이 세션 복제</button>
+          <button id="btnWipeScores" class="ghost">점수만 초기화</button>
+          <button id="btnWipeAll" class="danger">명단·점수 초기화</button>
+          <span style="margin-left:auto"></span>
+          <button id="btnDelSess" class="danger">세션 삭제</button>
         </div>
       </div>
     </section>
@@ -171,7 +199,11 @@ tr.dim td{color:var(--ink-3)}
       <section class="panel">
         <h2>세션 설정</h2>
         <div class="body">
-          <div class="fieldrow"><span>평가 제목</span><div><input type="text" id="cTitle" style="width:100%;max-width:420px" placeholder="예: 2026 상반기 개선과제 발표 심사"></div></div>
+          <div class="fieldrow"><span>입장 방식</span><div>
+            <label class="chk"><input type="radio" name="join" value="roster"> 사전 등록 명단만 입장 (사번 입력)</label>
+            <label class="chk" style="margin-left:16px"><input type="radio" name="join" value="open"> 누구나 신상 입력 후 입장</label>
+            <div style="font-size:12px;color:var(--ink-2);margin-top:5px">사전 등록 방식에서는 심사위원이 <b>사번만</b> 입력하면 들어옵니다. 명단에 없는 사번은 입장할 수 없습니다. 명단 등록은 제출 현황 탭에서 합니다.</div>
+          </div></div>
           <div class="fieldrow"><span>산출 방식</span><div>
             <label class="chk"><input type="radio" name="mode" value="simple"> 단순평균</label>
             <label class="chk" style="margin-left:16px"><input type="radio" name="mode" value="trimmed"> 절사평균 (최고·최저 각 1개 제외)</label>
@@ -232,9 +264,25 @@ tr.dim td{color:var(--ink-3)}
         </div>
       </section>
       <section class="panel">
-        <h2>심사위원 명단</h2>
-        <div class="body" style="overflow-x:auto">
-          <table id="raterTable"><tbody></tbody></table>
+        <h2>심사위원 명단<span class="note" id="rosterNote"></span></h2>
+        <div class="body">
+          <div class="row" style="margin-bottom:10px">
+            <button id="btnBulkPaste" class="primary">명단 붙여넣기로 등록</button>
+            <span style="color:var(--ink-3);font-size:12px">사전 등록해 두면 심사위원은 사번만 입력하고 들어옵니다</span>
+          </div>
+          <div id="pasteBox" class="hidden" style="margin-bottom:14px">
+            <textarea id="pasteArea" rows="7" placeholder="한 줄에 한 명씩, 쉼표 또는 탭으로 구분
+성명, 사번, 소속, 직위
+
+홍길동, 12345678, 생산기술팀, 책임
+김영희, 23456789, 품질보증팀, 선임"></textarea>
+            <div class="row" style="margin-top:8px">
+              <button id="btnPasteGo" class="primary">등록</button>
+              <button id="btnPasteCancel" class="ghost">취소</button>
+              <span id="pasteMsg" style="font-size:12.5px;color:var(--ink-2)"></span>
+            </div>
+          </div>
+          <div style="overflow-x:auto"><table id="raterTable"><tbody></tbody></table></div>
         </div>
       </section>
     </div>
@@ -270,6 +318,16 @@ tr.dim td{color:var(--ink-3)}
     </div>
   </div>
 </div>
+<div id="modal" class="modal hidden"><div class="mbox">
+  <h3 id="mTitle"></h3>
+  <div class="mbody" id="mBody"></div>
+  <div class="mfoot">
+    <button id="mDel" class="danger">이 제출 삭제</button>
+    <span style="margin-left:auto"></span>
+    <button id="mCancel" class="ghost">취소</button>
+    <button id="mSave" class="primary">저장</button>
+  </div>
+</div></div>
 <div id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -300,13 +358,14 @@ const db = firebase.database();
 /* ── 상태 ───────────────────────────────────────────────── */
 let CODE = localStorage.getItem('sc.code') || 'main';
 let S = null, refs = [];
-let D = { config:{}, criteria:{}, subjects:{}, raters:{}, scores:{}, screen:{}, roster:{} };
+let D = { config:{}, criteria:{}, subjects:{}, raters:{}, scores:{}, screen:{}, roster:{}, pass:{} };
 let authed = false, aggTimer = null;
 let ACTIVE = null, gotRaters = false, gotRoster = false;
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = (v,d=0) => { const n = Number(v); return isFinite(n) ? n : d; };
+const clean = c => String(c||'').trim().replace(/[.#$\[\]\/\s]/g,'');
 function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),1800); }
 
 /* ── 연결 확인 ──────────────────────────────────────────── */
@@ -362,7 +421,7 @@ function openSession(code){
   localStorage.setItem('sc.code', CODE);
   $('#codeInput').value = CODE;
   S = db.ref('sessions/' + CODE);
-  D = { config:{}, criteria:{}, subjects:{}, raters:{}, scores:{}, screen:{}, roster:{} };
+  D = { config:{}, criteria:{}, subjects:{}, raters:{}, scores:{}, screen:{}, roster:{}, pass:{} };
   gotRaters = gotRoster = false;
   const base = location.href.replace(/[^\/]*$/, '');
   $('#linkIndex').innerHTML = esc(base + 'index.html') + '<br><span style="color:var(--ink-3)">이 세션 고정: ' + esc(base + 'index.html?s=' + CODE) + '</span>';
@@ -370,10 +429,11 @@ function openSession(code){
   $('#sessNote').textContent = '현재 세션: ' + CODE;
   paintActive();
 
-  bind('config',   () => { renderSetup(); renderSubjects(); renderScreenCtl(); schedule(); });
+  bind('config',   () => { renderSetup(); renderSubjects(); renderRaters(); renderScreenCtl(); schedule(); });
   bind('criteria', () => { renderCriteria(); renderMatrix(); renderResults(); schedule(); });
   bind('subjects', () => { renderSubjects(); renderMatrix(); renderResults(); renderScreenCtl(); schedule(); });
   bind('raters',   () => { gotRaters = true; renderRaters(); renderMatrix(); syncRoster(); });
+  bind('pass',     () => {});
   bind('roster',   () => { gotRoster = true; syncRoster(); });
   bind('scores',   () => { renderCriteria(); renderMatrix(); renderResults(); schedule(); });
   bind('screen',   () => renderScreenCtl());
@@ -403,6 +463,47 @@ $('#btnNewSess').onclick = () => {
   db.ref('sessionIndex/'+clean).set({ title:'', createdAt: Date.now() });
   openSession(clean); loadSessionList();
 };
+/* ── 세션 복제 · 초기화 · 삭제 ─────────────────────────── */
+$('#btnDup').onclick = () => {
+  const c = prompt('복제할 새 세션 코드를 입력하세요. 문항과 평가 대상 구조만 가져오고, 점수와 명단은 가져오지 않습니다.', CODE + '-2');
+  if (!c) return;
+  const nc = clean(c); if (!nc) return;
+  db.ref('sessions/' + nc + '/config').once('value').then(sn => {
+    if (sn.exists()) { alert('이미 있는 세션 코드입니다.'); return null; }
+    const subs = {};
+    Object.entries(D.subjects || {}).forEach(([k,v]) => subs[k] = { name:v.name, desc:v.desc||'', state:'ready', order:num(v.order) });
+    const payload = {
+      config: { title: (D.config.title||'') + ' (복제)', mode: D.config.mode||'simple',
+                allowEditClosed: D.config.allowEditClosed !== false, joinMode: D.config.joinMode||'roster', createdAt: Date.now() },
+      criteria: D.criteria || {},
+      subjects: subs
+    };
+    return db.ref('sessions/' + nc).set(payload)
+      .then(() => db.ref('sessionIndex/' + nc).set({ title: payload.config.title, createdAt: Date.now() }))
+      .then(() => { openSession(nc); loadSessionList(); toast('복제했습니다'); });
+  }).catch(() => alert('복제하지 못했습니다.'));
+};
+$('#btnWipeScores').onclick = () => {
+  if (!confirm('이 세션의 제출 점수를 모두 지웁니다. 문항·대상·심사위원 명단은 그대로 둡니다.\n리허설 후 실전 직전에 쓰는 기능입니다.')) return;
+  S.update({ scores: null, aggregate: null }).then(() => toast('점수를 초기화했습니다'));
+};
+$('#btnWipeAll').onclick = () => {
+  if (!confirm('제출 점수와 심사위원 명단을 모두 지웁니다. 접속 중인 심사위원은 즉시 등록 화면으로 돌아갑니다.\n문항과 평가 대상은 남습니다.')) return;
+  const u = { scores: null, aggregate: null, raters: null, roster: null, pass: null };
+  Object.keys(D.raters || {}).forEach(rid => u['revoked/' + rid] = true);
+  S.update(u).then(() => toast('명단과 점수를 초기화했습니다'));
+};
+$('#btnDelSess').onclick = () => {
+  const a = prompt('세션 전체를 삭제합니다. 되돌릴 수 없습니다.\n지우려면 세션 코드를 그대로 입력하세요: ' + CODE);
+  if (clean(a) !== CODE) { if (a !== null) alert('코드가 일치하지 않아 취소했습니다.'); return; }
+  const after = () => { openSession('main'); loadSessionList(); toast('세션을 삭제했습니다'); };
+  db.ref('sessions/' + CODE).remove()
+    .then(() => db.ref('sessionIndex/' + CODE).remove())
+    .then(() => (ACTIVE === CODE ? db.ref('activeSession').remove() : null))
+    .then(after)
+    .catch(() => alert('삭제하지 못했습니다.'));
+};
+
 function loadSessionList(){
   db.ref('sessionIndex').once('value').then(s => {
     const v = s.val() || {}, sel = $('#sessList');
@@ -426,7 +527,9 @@ $$('nav.tabs button').forEach(b => b.onclick = () => {
 let setupSig = '';
 function renderSetup(){
   const c = D.config || {};
-  if ($('#cTitle') !== document.activeElement) $('#cTitle').value = c.title || '';
+  if ($('#sessName') !== document.activeElement) $('#sessName').value = c.title || '';
+  const j = c.joinMode === 'open' ? 'open' : 'roster';
+  $$('input[name=join]').forEach(r => r.checked = (r.value === j));
   const m = c.mode === 'trimmed' ? 'trimmed' : 'simple';
   $$('input[name=mode]').forEach(r => r.checked = (r.value === m));
   $('#cEdit').checked = c.allowEditClosed !== false;
@@ -435,11 +538,15 @@ function renderSetup(){
     ? `지금 마감된 <b>${closed}건</b>을 심사위원이 아직 고칠 수 있습니다. 결과 공개 직전에 꺼서 잠그세요.`
     : `마감된 <b>${closed}건</b>은 잠겨 있습니다. 심사위원 화면에서 수정할 수 없습니다.`;
 }
-$('#cTitle').onchange = e => {
-  S.child('config/title').set(e.target.value.trim());
-  db.ref('sessionIndex/'+CODE).update({ title: e.target.value.trim(), createdAt: D.config.createdAt || Date.now() });
-  loadSessionList();
-};
+function saveName(){
+  const t = $('#sessName').value.trim();
+  S.child('config/title').set(t);
+  db.ref('sessionIndex/'+CODE).update({ title: t, createdAt: D.config.createdAt || Date.now() });
+  loadSessionList(); toast('세션 이름을 저장했습니다');
+}
+$('#btnRename').onclick = saveName;
+$('#sessName').addEventListener('keydown', e => { if (e.key === 'Enter') saveName(); });
+$$('input[name=join]').forEach(r => r.onchange = () => { if (r.checked) S.child('config/joinMode').set(r.value); });
 $$('input[name=mode]').forEach(r => r.onchange = () => { if (r.checked) S.child('config/mode').set(r.value); });
 $('#cEdit').onchange = e => S.child('config/allowEditClosed').set(e.target.checked);
 function syncRoster(){
@@ -593,21 +700,113 @@ function renderMatrix(){
     h += `<tr><td>${esc(sv.name)} <span class="pill ${sv.state==='open'?'go':''}">${STL[sv.state]||'대기'}</span></td>`;
     rats.forEach(([rid]) => {
       const d = det[rid];
-      if (!d) { h += '<td class="cell miss">·</td>'; return; }
-      if (!d.complete) { staleTotal++; h += '<td class="cell stale" title="문항이 바뀌어 다시 제출이 필요합니다">!</td>'; return; }
-      h += `<td class="cell">${d.total}</td>`;
+      const a = `data-sid="${sid}" data-rid="${rid}" title="눌러서 수정"`;
+      if (!d) { h += `<td class="cell miss" ${a}>·</td>`; return; }
+      if (!d.complete) { staleTotal++; h += `<td class="cell stale" ${a} title="문항이 바뀌어 다시 제출이 필요합니다 · 눌러서 수정">!</td>`; return; }
+      h += `<td class="cell ${d.edited?'ed':''}" ${a}>${d.total}</td>`;
     });
     h += `<td class="n">${n}/${rats.length}</td></tr>`;
   });
   h += '</tbody></table>';
   if (maxTotal) h += `<p style="color:var(--ink-2);font-size:12px;margin:10px 0 0">칸의 숫자는 현재 배점으로 다시 계산한 총점입니다 (만점 ${maxTotal}점). <span style="color:var(--stop)">·</span> 은 미제출입니다.</p>`;
   if (staleTotal) h += `<p style="color:#7a5a05;font-size:12.5px;margin:6px 0 0"><b>!</b> 표시 ${staleTotal}건은 제출 이후 문항이 추가되어 값이 빠진 제출입니다. 집계에서 제외되며, 해당 대상을 다시 열어 재제출을 받아야 합니다.</p>`;
+  h += '<p style="color:var(--ink-3);font-size:12px;margin:6px 0 0">칸을 누르면 그 심사위원의 점수를 직접 고치거나 대신 입력할 수 있습니다. 운영자가 고친 칸에는 \u270E 표시가 붙습니다.</p>';
   $('#matrix').innerHTML = h;
+  $('#matrix').querySelectorAll('td.cell').forEach(td => td.onclick = () => openEdit(td.dataset.sid, td.dataset.rid));
 }
+
+/* ── 운영자 점수 수정 ───────────────────────────────────── */
+let EDIT = null;
+function openEdit(sid, rid){
+  const cri = criList();
+  if (!cri.length) return;
+  const sv = (D.subjects||{})[sid] || {}, rv = (D.raters||{})[rid] || {};
+  const rec = ((D.scores||{})[sid] || {})[rid] || null;
+  const v = (rec && rec.v) || {};
+  EDIT = { sid, rid, at: rec ? num(rec.at, Date.now()) : Date.now() };
+  $('#mTitle').textContent = (sv.name||'') + ' · ' + (rv.name||'') + (rv.dept ? ' (' + rv.dept + ')' : '');
+  $('#mBody').innerHTML = cri.map(([cid,cv]) => {
+    const mx = Math.max(1, num(cv.max,25));
+    const cur = (v[cid] === undefined || v[cid] === null) ? '' : Math.min(mx, num(v[cid]));
+    return `<div class="mrow"><div class="lb">${esc(cv.label)}<small>만점 ${mx}점</small></div>
+      <input type="number" data-cid="${cid}" min="0" max="${mx}" value="${cur}"></div>`;
+  }).join('') +
+  `<div class="mtot"><span>총점</span><b id="mTotal">—</b></div>` +
+  `<p style="font-size:12px;color:var(--ink-2);margin:12px 0 0">${rec ? '제출된 점수를 고칩니다.' : '아직 제출하지 않은 심사위원입니다. 종이 채점표를 대신 입력할 수 있습니다.'} 해당 대상이 열려 있으면 심사위원이 다시 제출할 때 덮어쓰이니, 마감한 뒤에 고치세요.</p>`;
+  $('#mDel').classList.toggle('hidden', !rec);
+  $('#modal').classList.remove('hidden');
+  const inputs = Array.from($('#mBody').querySelectorAll('input'));
+  const calc = () => {
+    let t = 0, miss = false;
+    inputs.forEach(i => { if (i.value.trim() === '') { miss = true; return; }
+      t += Math.max(0, Math.min(num(i.max,0), Math.round(num(i.value)))); });
+    $('#mTotal').textContent = miss ? '—' : t;
+  };
+  inputs.forEach(i => i.addEventListener('input', calc));
+  calc();
+  inputs[0] && inputs[0].focus();
+}
+function closeEdit(){ $('#modal').classList.add('hidden'); EDIT = null; }
+$('#mCancel').onclick = closeEdit;
+$('#modal').onclick = e => { if (e.target.id === 'modal') closeEdit(); };
+$('#mSave').onclick = () => {
+  if (!EDIT) return;
+  const cri = criList(), v = {}; let total = 0, miss = false;
+  cri.forEach(([cid,cv]) => {
+    const el = $('#mBody').querySelector(`input[data-cid="${cid}"]`);
+    if (!el || el.value.trim() === '') { miss = true; return; }
+    const val = Math.max(0, Math.min(num(cv.max,0), Math.round(num(el.value))));
+    v[cid] = val; total += val;
+  });
+  if (miss) { alert('모든 문항에 점수를 입력하세요.'); return; }
+  S.child('scores/' + EDIT.sid + '/' + EDIT.rid)
+    .set({ v, total, at: EDIT.at, edited: true, editedAt: Date.now() })
+    .then(() => { closeEdit(); toast('점수를 수정했습니다'); })
+    .catch(() => alert('저장하지 못했습니다.'));
+};
+$('#mDel').onclick = () => {
+  if (!EDIT || !confirm('이 심사위원의 이 대상 점수를 삭제합니다.')) return;
+  S.child('scores/' + EDIT.sid + '/' + EDIT.rid).remove()
+    .then(() => { closeEdit(); toast('삭제했습니다'); });
+};
+/* ── 명단 사전 등록 ─────────────────────────────────────
+   사번을 키로 pass/{사번} 에 입장 정보를 둡니다. 정확한 사번을 알아야
+   그 한 칸만 읽히고, 명단 전체 조회는 규칙으로 막혀 있습니다. */
+$('#btnBulkPaste').onclick = () => { $('#pasteBox').classList.toggle('hidden'); $('#pasteMsg').textContent = ''; $('#pasteArea').focus(); };
+$('#btnPasteCancel').onclick = () => $('#pasteBox').classList.add('hidden');
+$('#btnPasteGo').onclick = () => {
+  const lines = $('#pasteArea').value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (!lines.length) { $('#pasteMsg').textContent = '내용이 비어 있습니다.'; return; }
+  const exist = new Set(Object.values(D.raters || {}).map(r => clean(r.empno)).filter(Boolean));
+  const u = {}; let ok = 0; const skip = [];
+  lines.forEach(line => {
+    const f = line.split(/[\t,]/).map(x => x.trim());
+    const name = f[0] || '', empno = clean(f[1] || ''), dept = f[2] || '', position = f[3] || '';
+    if (!name) { skip.push(line + ' (성명 없음)'); return; }
+    if (!empno) { skip.push(name + ' (사번 없음)'); return; }
+    if (exist.has(empno)) { skip.push(name + ' (사번 중복)'); return; }
+    exist.add(empno);
+    const rid = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+    const at = Date.now();
+    u['raters/' + rid] = { name, empno, dept, position, at };
+    u['roster/' + rid] = at;
+    u['pass/' + empno] = { rid, name, dept, position };
+    ok++;
+  });
+  if (!ok) { $('#pasteMsg').textContent = '등록된 사람이 없습니다. ' + skip.join(' / '); return; }
+  S.update(u).then(() => {
+    $('#pasteArea').value = '';
+    $('#pasteMsg').textContent = ok + '명 등록' + (skip.length ? ' · 제외 ' + skip.length + '명: ' + skip.join(' / ') : '');
+    toast(ok + '명을 등록했습니다');
+  }).catch(() => $('#pasteMsg').textContent = '등록하지 못했습니다.');
+};
+
 function renderRaters(){
   const rats = raterList();
+  const roster = (D.config||{}).joinMode === 'open' ? '누구나 신상 입력 후 입장' : '사전 등록 명단만 입장';
+  $('#rosterNote').textContent = rats.length + '명 · ' + roster;
   const tb = $('#raterTable').querySelector('tbody');
-  if (!rats.length) { tb.innerHTML = '<tr><td style="color:var(--ink-3)">아직 등록한 심사위원이 없습니다.</td></tr>'; return; }
+  if (!rats.length) { tb.innerHTML = '<tr><td style="color:var(--ink-3)">아직 등록한 심사위원이 없습니다. 위에서 명단을 붙여넣어 등록하세요.</td></tr>'; return; }
   const totalSubs = subList().length;
   tb.innerHTML = '<tr><th style="width:36px">#</th><th>성명</th><th>사번</th><th>소속</th><th>직위</th><th class="n" style="width:80px">제출</th><th style="width:60px"></th></tr>' +
     rats.map(([rid,v],i) => {
@@ -622,9 +821,11 @@ function renderRaters(){
     const rid = e.target.closest('tr').dataset.rid;
     if (!confirm('이 심사위원과 제출한 점수를 모두 삭제합니다. 해당 심사위원 화면은 곧바로 등록 화면으로 돌아갑니다.')) return;
     const u = {};
+    const emp = clean((D.raters[rid]||{}).empno);
     u['raters/' + rid] = null;
     u['roster/' + rid] = null;
     u['revoked/' + rid] = true;
+    if (emp) u['pass/' + emp] = null;
     subList().forEach(([sid]) => u['scores/' + sid + '/' + rid] = null);
     S.update(u).then(() => toast('삭제했습니다')).catch(() => toast('삭제하지 못했습니다'));
   });
@@ -655,7 +856,7 @@ function computeAll(){
         const val = Math.max(0, Math.min(num(c.max, 0), num(got)));
         vv[cid] = val; total += val;
       });
-      det[rid] = { total, complete, stored: num(rec && rec.total) };
+      det[rid] = { total, complete, stored: num(rec && rec.total), edited: !!(rec && rec.edited) };
       if (complete) rows.push({ rid, total, v: vv }); else stale++;
     });
     let used = rows, applied = false;
@@ -714,7 +915,7 @@ $('#btnCsv').onclick = () => {
     rats.forEach(([rid,rv]) => {
       const v = sc[rid]; if (!v) return;
       const d = det[rid] || {};
-      const flag = d.complete ? '' : '문항 누락 · 집계 제외';
+      const flag = [d.complete ? '' : '문항 누락 · 집계 제외', d.edited ? '운영자 수정' : ''].filter(Boolean).join(' / ');
       cri.forEach(([cid,cv]) => {
         const raw = (v.v||{})[cid];
         rows.push([sv.name, rv.name, rv.empno||'', rv.dept||'', rv.position||'', cv.label,
