@@ -304,6 +304,13 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
           <div id="arcDetail" style="margin-top:16px"></div>
         </div>
       </section>
+      <section class="panel" id="legacyPanel">
+        <h2>예전 세션 불러오기<span class="note" id="legNote">확인 중</span></h2>
+        <div class="body">
+          <p class="hint">구조를 바꾸기 전에 <b>세션</b> 방식으로 진행했던 회차입니다. 데이터베이스에 그대로 남아 있습니다. 보관함으로 가져오면 지금 방식으로 결과 조회·CSV·복원이 됩니다.</p>
+          <div style="overflow-x:auto"><table id="legTable"><tbody></tbody></table></div>
+        </div>
+      </section>
     </div>
 
     <div id="tab-scr" class="tabpane hidden">
@@ -355,7 +362,7 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
       싱가포르에서 만들었다면  https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app
    ═══════════════════════════════════════════════════════════════ */
 const DATABASE_URL = "https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app";
-const BUILD = "2026-09-17h";   /* 세 파일의 값이 같아야 최신입니다 */
+const BUILD = "2026-09-17i";   /* 세 파일의 값이 같아야 최신입니다 */
 
 const firebaseConfig = {
   apiKey: "AIzaSyCXGmsExbOCnvxDZpXcL1A10FlKeGZjjUI",
@@ -483,6 +490,7 @@ function attach(){
   bind('screen',   () => renderScreenCtl());
 
   db.ref('archive').on('value', snap => { ARC = snap.val() || {}; renderArchive(); });
+  loadLegacy();
 }
 
 /* ── 회차 이름 ── */
@@ -590,7 +598,7 @@ function renderArchive(){
         <td class="n">${fmtWhen(m.savedAt)}</td>
         <td class="n">${num(m.subjects)}</td>
         <td class="n">${num(m.entered) || num(m.raters)}</td>
-        <td>${esc(m.top || '—')}</td>
+        <td>${esc(m.top || '—')}${m.from ? '<br><span style="font-size:11px;color:var(--ink-3)">' + esc(m.from) + '</span>' : ''}</td>
         <td><button data-a="view">결과</button>
             <button data-a="csv" class="ghost">CSV</button>
             <button data-a="restore" class="ghost">라이브로 복원</button>
@@ -660,6 +668,85 @@ async function arcDelete(id){
   db.ref('archive/' + id).remove().then(() => toast('삭제했습니다'))
     .catch(e => notify(failMsg('삭제하지 못했습니다.', e), '삭제 실패'));
 }
+/* ── 예전 세션(sessions/{코드}) 불러오기 ──
+   경로만 바뀌었을 뿐 데이터는 그대로 남아 있습니다. 보관함 형태로 옮겨 담습니다. */
+let LEG = {};
+function loadLegacy(){
+  db.ref('sessions').once('value').then(snap => { LEG = snap.val() || {}; renderLegacy(); })
+    .catch(() => { LEG = {}; renderLegacy(true); });
+}
+function renderLegacy(failed){
+  const list = Object.entries(LEG || {});
+  const tb = $('#legTable').querySelector('tbody');
+  $('#legNote').textContent = failed ? '읽지 못했습니다' : (list.length ? list.length + '개 남아 있음' : '없음');
+  if (failed) {
+    tb.innerHTML = '<tr><td style="color:var(--stop)">예전 세션 데이터를 읽지 못했습니다. 보안 규칙을 최신 <b>database.rules.json</b> 으로 다시 게시했는지 확인해 주세요.</td></tr>';
+    return;
+  }
+  if (!list.length) {
+    $('#legacyPanel').classList.add('hidden');
+    tb.innerHTML = '';
+    return;
+  }
+  $('#legacyPanel').classList.remove('hidden');
+  tb.innerHTML = '<tr><th style="width:150px">세션 코드</th><th>이름</th><th class="n" style="width:66px">대상</th><th class="n" style="width:80px">심사위원</th><th class="n" style="width:80px">제출</th><th style="width:230px"></th></tr>' +
+    list.map(([code, d]) => {
+      const subs = Object.keys((d||{}).subjects || {}).length;
+      const rats = Object.keys((d||{}).raters || {}).length;
+      const subm = Object.values((d||{}).scores || {}).reduce((t,o) => t + Object.keys(o||{}).length, 0);
+      return `<tr data-code="${esc(code)}">
+        <td class="n">${esc(code)}</td>
+        <td>${esc(((d||{}).config||{}).title || '—')}</td>
+        <td class="n">${subs}</td><td class="n">${rats}</td><td class="n">${subm}</td>
+        <td><button data-a="imp" class="primary">보관함으로 가져오기</button>
+            <button data-a="drop" class="danger">원본 삭제</button></td></tr>`;
+    }).join('');
+  tb.querySelectorAll('button[data-a]').forEach(b => b.onclick = e => {
+    const code = e.target.closest('tr').dataset.code;
+    if (e.target.dataset.a === 'imp') legImport(code); else legDrop(code);
+  });
+}
+async function legImport(code){
+  const d = (LEG || {})[code]; if (!d) return;
+  const def = ((d.config||{}).title || '').trim() || code;
+  const name = await askText('예전 세션 <b>' + esc(code) + '</b> 을(를) 보관함으로 가져옵니다. 이름을 정해 주세요.', def,
+    { title: '예전 세션 가져오기', ok: '가져오기' });
+  if (name === null) return;
+  const data = Object.assign({}, d);
+  const trimmed = (data.config||{}).mode === 'trimmed';
+  const { agg } = aggregateFrom(data.criteria, data.subjects, data.scores, trimmed);
+  data.aggregate = agg;
+  data.screen = { mode: 'idle', ts: Date.now() };
+  const cri = Object.values(data.criteria || {});
+  const ranked = Object.entries(data.subjects || {})
+    .sort((x,y) => num((agg[y[0]]||{}).avg) - num((agg[x[0]]||{}).avg));
+  const top = ranked.length && num((agg[ranked[0][0]]||{}).n)
+    ? ranked[0][1].name + ' ' + num(agg[ranked[0][0]].avg).toFixed(2) : '—';
+  const id = 'a' + Date.now().toString(36);
+  db.ref('archive/' + id).set({
+    meta: {
+      name: (name.trim() || code),
+      savedAt: num((data.config||{}).createdAt) || Date.now(),
+      subjects: Object.keys(data.subjects || {}).length,
+      raters: Object.keys(data.raters || {}).length,
+      entered: Object.keys(data.roster || {}).length,
+      maxTotal: cri.reduce((t,v) => t + num(v.max), 0),
+      top,
+      from: '예전 세션 ' + code
+    },
+    data
+  }).then(() => toast('보관함으로 가져왔습니다'))
+    .catch(e => notify(failMsg('가져오지 못했습니다.', e), '가져오기 실패'));
+}
+async function legDrop(code){
+  if (!await ask('예전 세션 <b>' + esc(code) + '</b> 의 원본을 데이터베이스에서 지웁니다.<br><br>보관함으로 먼저 가져왔는지 확인하세요. 되돌릴 수 없습니다.',
+      { title: '원본 삭제', ok: '삭제', danger: true })) return;
+  db.ref('sessions/' + code).remove()
+    .then(() => db.ref('sessionIndex/' + code).remove().catch(()=>{}))
+    .then(() => { delete LEG[code]; renderLegacy(); toast('원본을 삭제했습니다'); })
+    .catch(e => notify(failMsg('삭제하지 못했습니다.', e), '삭제 실패'));
+}
+
 function downloadCsv(rows, filename){
   const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
   const a = document.createElement('a');
@@ -1093,12 +1180,15 @@ function r2(n){ return Math.round(n * 100) / 100; }
    - 배점을 낮춰서 기존 값이 만점을 넘으면 만점으로 맞춥니다.
    - 문항이 추가되어 값이 빠진 제출은 0점 처리하지 않고 집계에서 빼고(stale) 재제출 대상으로 표시합니다. */
 function computeAll(){
-  const cri = criList(), subs = subList();
+  return aggregateFrom(D.criteria, D.subjects, D.scores, (D.config||{}).mode === 'trimmed');
+}
+function aggregateFrom(criObj, subObj, scoreObj, trimmed){
+  const cri = Object.entries(criObj||{}).sort((a,b)=>num(a[1].order)-num(b[1].order));
+  const subs = Object.entries(subObj||{}).sort((a,b)=>num(a[1].order)-num(b[1].order));
   const maxTotal = cri.reduce((s,[,v])=>s+num(v.max),0);
-  const trimmed = (D.config||{}).mode === 'trimmed';
   const agg = {}, detail = {};
   subs.forEach(([sid]) => {
-    const sc = (D.scores||{})[sid] || {};
+    const sc = (scoreObj||{})[sid] || {};
     const rows = [], det = {};
     let stale = 0;
     Object.entries(sc).forEach(([rid, rec]) => {
