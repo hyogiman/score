@@ -3,98 +3,140 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>평가 결과</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0f1a21; --bg-2:#16242d; --panel:#1b2c36;
-  --fg:#e9f1f4; --fg-2:#9db1bc; --fg-3:#5d7382;
-  --line:#2c4552; --go:#41c2a6; --amber:#e8b33c;
+  --ink-2:#132430; --plate:#172a36; --plate-2:#1d3341;
+  --fg:#eef5f8; --fg-2:#9db4c0; --fg-3:#5c7686;
+  --line:#28404f; --line-2:#345364;
+  --go:#3fc6a8; --amber:#f0b429; --steel:#7fa8bd;
   --sans:"IBM Plex Sans KR",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;height:100%;overflow:hidden}
-body{background:var(--bg);color:var(--fg);font-family:var(--sans);display:flex;flex-direction:column}
-.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+body{
+  background:#0c151b;color:var(--fg);font-family:var(--sans);display:flex;flex-direction:column;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(127,168,189,.05) 0 1px, transparent 1px 64px),
+    repeating-linear-gradient(0deg, rgba(127,168,189,.05) 0 1px, transparent 1px 64px);
+}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
-/* 상단 계측 스케일 */
-.scale{height:26px;background:var(--panel);position:relative;flex:none;border-bottom:1px solid var(--line)}
-.scale::before{content:"";position:absolute;left:0;right:0;bottom:0;height:7px;
-  background:repeating-linear-gradient(90deg,var(--fg-3) 0 1px,transparent 1px 9px)}
-.scale::after{content:"";position:absolute;left:0;right:0;bottom:0;height:15px;
-  background:repeating-linear-gradient(90deg,var(--fg-2) 0 1.5px,transparent 1.5px 45px)}
+.rule{height:clamp(18px,2.2vh,28px);flex:none;background:#101f28;position:relative;border-bottom:1px solid var(--line)}
+.rule::before{content:"";position:absolute;left:0;right:0;bottom:0;height:40%;
+  background:repeating-linear-gradient(90deg,var(--fg-3) 0 1px,transparent 1px 10px)}
+.rule::after{content:"";position:absolute;left:0;right:0;bottom:0;height:78%;
+  background:repeating-linear-gradient(90deg,var(--steel) 0 2px,transparent 2px 50px)}
 
-header{flex:none;padding:14px 34px;display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line)}
-header .t{font-size:17px;font-weight:600;letter-spacing:.01em}
-header .c{margin-left:auto;font-family:var(--mono);font-size:13px;color:var(--fg-3)}
+header{flex:none;display:flex;align-items:center;gap:clamp(10px,1.6vw,22px);
+  padding:clamp(8px,1.4vh,16px) clamp(16px,2.6vw,44px);border-bottom:1px solid var(--line)}
+header .tag{font-family:var(--mono);font-size:clamp(10px,1.05vw,14px);letter-spacing:.14em;
+  color:var(--fg-3);border:1px solid var(--line-2);padding:3px 9px;flex:none}
+header .ttl{font-size:clamp(13px,1.5vw,21px);font-weight:500;color:var(--fg-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header .rt{margin-left:auto;font-family:var(--mono);font-size:clamp(10px,1vw,13px);color:var(--fg-3);flex:none}
 
-main{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;padding:26px 34px 34px}
+main{flex:1;min-height:0;display:flex;flex-direction:column;
+  padding:clamp(14px,2.4vh,34px) clamp(16px,2.6vw,44px) clamp(16px,2.8vh,38px)}
 
-/* 대기 */
-.idle{text-align:center}
-.idle .k{font-size:clamp(28px,4.4vw,56px);font-weight:600;margin-bottom:14px}
-.idle .s{color:var(--fg-2);font-size:clamp(14px,1.5vw,20px)}
+.idle{margin:auto;text-align:center;max-width:82%}
+.idle .k{font-size:clamp(30px,5.6vw,86px);font-weight:600;line-height:1.15;letter-spacing:-.02em}
+.idle .s{margin-top:clamp(10px,1.8vh,22px);color:var(--fg-2);font-size:clamp(14px,1.9vw,26px);font-weight:300}
+.idle .tick{margin:clamp(18px,3vh,34px) auto 0;width:min(460px,60%);height:12px;
+  background:repeating-linear-gradient(90deg,var(--line-2) 0 2px,transparent 2px 22px);opacity:.8}
 
-/* 제출 진행 */
-.prog .name{font-size:clamp(24px,3.4vw,44px);font-weight:600;margin-bottom:26px}
-.dots{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:22px}
-.dots i{width:clamp(26px,3vw,44px);height:clamp(26px,3vw,44px);border:2px solid var(--line);border-radius:50%;display:block}
-.dots i.f{background:var(--go);border-color:var(--go)}
-.prog .cnt{font-family:var(--mono);font-size:clamp(18px,2.2vw,30px);color:var(--fg-2)}
+.prog{display:flex;flex-direction:column;height:100%}
+.prog .nm{font-size:clamp(26px,4.6vw,68px);font-weight:600;letter-spacing:-.02em}
+.prog .dots{flex:1;display:flex;flex-wrap:wrap;align-content:center;gap:clamp(10px,1.5vw,22px);padding:clamp(12px,2vh,28px) 0}
+.prog .dots i{width:clamp(34px,4.4vw,74px);aspect-ratio:1;border:2px solid var(--line-2);display:block}
+.prog .dots i.f{background:var(--go);border-color:var(--go)}
+.prog .cnt{font-family:var(--mono);font-size:clamp(18px,2.6vw,38px);color:var(--fg-2)}
 .prog .cnt b{color:var(--fg);font-weight:600}
 
-/* 점수 공개 */
-.rev .name{font-size:clamp(22px,3vw,40px);font-weight:600;margin-bottom:6px}
-.rev .meta{color:var(--fg-3);font-size:14px;font-family:var(--mono);margin-bottom:22px}
-.bigrow{display:flex;align-items:flex-end;gap:18px;margin-bottom:6px}
-.big{font-family:var(--mono);font-size:clamp(72px,15vw,190px);font-weight:600;line-height:.9;letter-spacing:-.02em}
-.big .den{font-size:.26em;color:var(--fg-3);font-weight:400;letter-spacing:0}
+.rev{display:flex;flex-direction:column;height:100%;gap:clamp(10px,1.8vh,24px)}
+.rev .head{display:flex;align-items:flex-start;gap:clamp(12px,2vw,30px);flex:none}
+.rev .seq{font-family:var(--mono);font-size:clamp(26px,4.4vw,72px);font-weight:600;line-height:1;
+  color:var(--amber);letter-spacing:-.03em;flex:none}
+.rev .seq small{display:block;font-size:.3em;color:var(--fg-3);letter-spacing:.1em;margin-top:.5em}
+.rev .who{min-width:0;flex:1}
+.rev .who h1{margin:0;font-size:clamp(28px,5vw,80px);font-weight:600;line-height:1.05;letter-spacing:-.025em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rev .who p{margin:clamp(4px,.8vh,10px) 0 0;font-size:clamp(13px,1.7vw,24px);color:var(--fg-2);font-weight:300;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rev .stamp{flex:none;text-align:right;font-family:var(--mono);font-size:clamp(11px,1.2vw,17px);color:var(--fg-3);line-height:1.7}
+.rev .stamp b{display:block;color:var(--go);font-size:1.5em;font-weight:600}
 
-/* 계측 바 — 이 화면의 주인공 */
-.meter{position:relative;height:56px;margin:18px 0 26px}
-.meter .rail{position:absolute;left:0;right:0;top:18px;height:14px;background:var(--bg-2);border:1px solid var(--line)}
-.meter .fill{position:absolute;left:1px;top:19px;height:12px;background:var(--go);width:0;transition:width .9s cubic-bezier(.16,.9,.3,1)}
-.meter .tick{position:absolute;left:0;right:0;top:34px;height:12px;
-  background:repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px 2.5%)}
-.meter .tick.major{top:34px;height:20px;
-  background:repeating-linear-gradient(90deg,var(--fg-3) 0 1.5px,transparent 1.5px 12.5%)}
-.meter .needle{position:absolute;top:6px;height:40px;width:3px;background:var(--amber);left:0;transition:left .9s cubic-bezier(.16,.9,.3,1)}
-.meter .needle::after{content:"";position:absolute;top:-8px;left:-5px;border:6px solid transparent;border-top-color:var(--amber)}
-.meter .ends{position:absolute;left:0;right:0;top:56px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--fg-3)}
+.board{flex:1;min-height:0;display:grid;grid-template-columns:minmax(230px,32%) 1fr;gap:clamp(12px,2vw,30px)}
+.plate{background:var(--plate);border:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.plate>h3{margin:0;flex:none;font-size:clamp(10px,1vw,13px);font-weight:600;letter-spacing:.16em;
+  color:var(--fg-3);padding:clamp(7px,1.1vh,12px) clamp(10px,1.2vw,18px);border-bottom:1px solid var(--line)}
+.plate>.in{flex:1;min-height:0;padding:clamp(10px,1.8vh,24px) clamp(12px,1.4vw,22px);display:flex;flex-direction:column}
 
-.crilist{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px 26px;margin-top:34px}
-.crirow .l{display:flex;align-items:baseline;gap:8px;font-size:14px;color:var(--fg-2);margin-bottom:5px}
-.crirow .l b{margin-left:auto;font-family:var(--mono);font-size:17px;color:var(--fg);font-weight:600}
-.crirow .b{height:8px;background:var(--bg-2);border:1px solid var(--line);position:relative}
-.crirow .b i{position:absolute;left:0;top:0;bottom:0;background:var(--fg-2);width:0;transition:width .8s ease}
+.big{font-family:var(--mono);font-weight:600;line-height:.86;letter-spacing:-.04em;
+  font-size:clamp(54px,9.4vw,158px);margin:auto 0 0;font-variant-numeric:tabular-nums}
+.big em{font-style:normal;font-size:.26em;color:var(--fg-3);letter-spacing:0;font-weight:400}
+.gauge{margin-top:auto;padding-top:clamp(10px,2vh,22px);flex:none}
+.gauge .rail{position:relative;height:clamp(14px,2.2vh,24px);background:var(--ink-2);border:1px solid var(--line-2)}
+.gauge .fill{position:absolute;left:0;top:0;bottom:0;background:var(--go);width:0;transition:width 1s cubic-bezier(.16,.9,.28,1)}
+.gauge .pin{position:absolute;top:-6px;bottom:-6px;width:3px;background:var(--amber);left:0;
+  transition:left 1s cubic-bezier(.16,.9,.28,1)}
+.gauge .ticks{height:9px;margin-top:3px;background:repeating-linear-gradient(90deg,var(--line-2) 0 1px,transparent 1px 5%)}
+.gauge .ends{display:flex;justify-content:space-between;font-family:var(--mono);
+  font-size:clamp(10px,1vw,13px);color:var(--fg-3);margin-top:4px}
 
-/* 순위 */
-.rank{width:100%;max-height:100%;overflow:hidden}
-.rank .r{display:grid;grid-template-columns:54px 1fr 190px 96px;gap:16px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
-.rank .r:last-child{border-bottom:none}
-.rank .pos{font-family:var(--mono);font-size:clamp(17px,2vw,26px);color:var(--fg-3);text-align:right}
-.rank .r.top .pos{color:var(--amber)}
-.rank .nm{font-size:clamp(15px,1.7vw,22px);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rank .bar{height:11px;background:var(--bg-2);border:1px solid var(--line);position:relative}
-.rank .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--go);width:0;transition:width .8s ease}
-.rank .r.top .bar i{background:var(--amber)}
-.rank .av{font-family:var(--mono);font-size:clamp(17px,2vw,26px);font-weight:600;text-align:right}
-.rank h3{margin:0 0 16px;font-size:clamp(18px,2.2vw,28px);font-weight:600}
+.bars{flex:1;min-height:0;display:flex;gap:clamp(8px,1.4vw,26px);align-items:stretch}
+.bar{flex:1;min-width:0;display:flex;flex-direction:column;gap:clamp(5px,.9vh,10px)}
+.bar .v{font-family:var(--mono);font-size:clamp(16px,2.3vw,40px);font-weight:600;line-height:1;text-align:center;
+  font-variant-numeric:tabular-nums}
+.bar .v em{font-style:normal;font-size:.44em;color:var(--fg-3);font-weight:400}
+.bar .track{flex:1;min-height:0;position:relative;background:var(--ink-2);border:1px solid var(--line-2);
+  background-image:repeating-linear-gradient(0deg,rgba(127,168,189,.13) 0 1px,transparent 1px 20%)}
+.bar .track i{position:absolute;left:0;right:0;bottom:0;height:0;background:var(--steel);
+  transition:height .95s cubic-bezier(.16,.9,.28,1)}
+.bar .track i::after{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--amber)}
+.bar .nm{font-size:clamp(11px,1.25vw,19px);color:var(--fg-2);text-align:center;line-height:1.25;
+  word-break:keep-all;flex:none;font-weight:500}
 
-.note{position:fixed;left:34px;bottom:14px;font-size:12px;color:var(--fg-3)}
+.rank{display:flex;flex-direction:column;height:100%;min-height:0}
+.rank h2{margin:0 0 clamp(8px,1.6vh,18px);flex:none;font-size:clamp(15px,1.9vw,27px);font-weight:600}
+.rank h2 span{color:var(--fg-3);font-weight:400;font-family:var(--mono);font-size:.7em;margin-left:.6em}
+.rlist{flex:1;min-height:0;display:flex;flex-direction:column;gap:clamp(3px,.6vh,8px)}
+.r{flex:1;min-height:0;display:grid;
+  grid-template-columns:clamp(42px,4.6vw,78px) minmax(0,1fr) minmax(90px,30%) clamp(84px,9vw,168px);
+  align-items:center;gap:clamp(8px,1.4vw,22px);background:var(--plate);border:1px solid var(--line);
+  padding:0 clamp(10px,1.4vw,22px)}
+.r .p{font-size:clamp(17px,2.4vw,40px);font-weight:600;color:var(--fg-3);text-align:center}
+.r .n{font-size:clamp(14px,2vw,34px);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r .b{height:clamp(9px,1.5vh,17px);background:var(--ink-2);border:1px solid var(--line-2);position:relative}
+.r .b i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--steel);transition:width .9s ease}
+.r .s{font-size:clamp(17px,2.5vw,42px);font-weight:600;text-align:right}
+.r.top{background:var(--plate-2);border-color:var(--amber)}
+.r.top .p,.r.top .s{color:var(--amber)}
+.r.top .b i{background:var(--amber)}
+
+.foot{flex:none;margin-top:clamp(8px,1.4vh,16px);font-family:var(--mono);
+  font-size:clamp(9px,.95vw,12px);color:var(--fg-3);letter-spacing:.08em}
 .hidden{display:none!important}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
-@media (max-width:760px){header,main{padding-left:16px;padding-right:16px}.rank .r{grid-template-columns:38px 1fr 76px}.rank .bar{display:none}.note{left:16px}}
+@media (max-aspect-ratio:1/1){
+  .board{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .rev .seq{font-size:clamp(20px,7vw,40px)}
+}
 </style>
 </head>
 <body>
-<div class="scale"></div>
-<header><span class="t" id="hTitle">평가</span><span class="c" id="hCode"></span></header>
+<div class="rule"></div>
+<header>
+  <span class="tag">SCORE</span>
+  <span class="ttl" id="hTitle">평가</span>
+  <span class="rt" id="hBuild"></span>
+</header>
 <main id="stage"></main>
-<div class="note" id="note">개별 점수와 평가자는 표시되지 않습니다</div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -103,7 +145,7 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:cent
    DATABASE_URL 은 admin.html / index.html 과 반드시 같은 값이어야 합니다.
    ═══════════════════════════════════════════════════════════════ */
 const DATABASE_URL = "https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app";
-const BUILD = "2026-09-17g";
+const BUILD = "2026-09-17h";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCXGmsExbOCnvxDZpXcL1A10FlKeGZjjUI",
@@ -116,113 +158,112 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+const S = db.ref('live');   /* 세션 개념 없음 — 항상 라이브 한 곳만 봅니다 */
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = (v,d=0) => { const n = Number(v); return isFinite(n) ? n : d; };
-const clean = c => String(c||'').trim().replace(/[.#$\[\]\/\s]/g,'');
-const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const slow = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* 이 화면은 aggregate(집계 결과)만 읽습니다. 개별 점수 경로는 구독하지 않습니다. */
-let CODE = null, S = null;
 let D = { config:{}, criteria:{}, subjects:{}, aggregate:{}, roster:{}, screen:{} };
+['config','criteria','subjects','aggregate','roster','screen'].forEach(p =>
+  S.child(p).on('value', s => { D[p] = s.val() || {}; render(); }));
 
-const FIXED = clean(new URLSearchParams(location.search).get('s'));
-if (FIXED) boot(FIXED);
-else db.ref('activeSession').on('value', s => {
-  const c = clean(s.val()) || 'main';
-  if (CODE === null) boot(c);
-  else if (c !== CODE) location.reload();
-});
-
-function boot(code){
-  CODE = code;
-  S = db.ref('sessions/' + CODE);
-  $('#hCode').textContent = CODE + ' · ' + BUILD;
-  ['config','criteria','subjects','aggregate','roster','screen'].forEach(p =>
-    S.child(p).on('value', s => { D[p] = s.val() || {}; render(); }));
-  render();
-}
-
-function criList(){ return Object.entries(D.criteria||{}).sort((a,b)=>num(a[1].order)-num(b[1].order)); }
-function subList(){ return Object.entries(D.subjects||{}).sort((a,b)=>num(a[1].order)-num(b[1].order)); }
-function raterTotal(){ return Object.keys(D.roster||{}).length; }
+$('#hBuild').textContent = BUILD;
+const criList = () => Object.entries(D.criteria||{}).sort((a,b)=>num(a[1].order)-num(b[1].order));
+const subList = () => Object.entries(D.subjects||{}).sort((a,b)=>num(a[1].order)-num(b[1].order));
+const entered = () => Object.keys(D.roster||{}).length;
 
 let lastKey = '';
 function render(){
   $('#hTitle').textContent = (D.config||{}).title || '평가';
-  const sc = D.screen || {};
-  const mode = sc.mode || 'idle';
-  const sid = sc.sid;
+  const sc = D.screen || {}, mode = sc.mode || 'idle', sid = sc.sid;
   const key = mode + '|' + (sid||'') + '|' + (sc.ts||'');
   const fresh = key !== lastKey;
   lastKey = key;
-
-  if (mode === 'rank') return drawRank(fresh);
+  if (mode === 'rank') return drawRank();
   if (mode === 'reveal' && sid) return drawReveal(sid, fresh);
-  if (mode === 'progress' && sid) return drawProgress(sid, fresh);
-  return drawIdle();
+  if (mode === 'progress' && sid) return drawProgress(sid);
+  drawIdle();
 }
 
 function drawIdle(){
   const n = subList().length;
-  $('#stage').innerHTML = '<div class="idle">' +
-    '<div class="k">' + esc((D.config||{}).title || '평가를 시작합니다') + '</div>' +
-    '<div class="s">' + (n ? '평가 대상 ' + n + '건 · 채점이 끝나면 결과를 공개합니다' : '준비 중입니다') + '</div></div>';
+  $('#stage').innerHTML =
+    '<div class="idle"><div class="k">' + esc((D.config||{}).title || '평가를 시작합니다') + '</div>' +
+    '<div class="s">' + (n ? '평가 대상 ' + n + '건 · 채점이 끝나면 결과를 공개합니다' : '준비 중입니다') + '</div>' +
+    '<div class="tick"></div></div>';
 }
 
 function drawProgress(sid){
   const sv = (D.subjects||{})[sid] || {};
   const a = (D.aggregate||{})[sid] || {};
-  const total = Math.max(raterTotal(), num(a.n));
+  const total = Math.max(entered(), num(a.n), 1);
   const done = num(a.n);
   let dots = '';
-  for (let i = 0; i < Math.max(total,1); i++) dots += '<i class="' + (i < done ? 'f' : '') + '"></i>';
-  $('#stage').innerHTML = '<div class="prog">' +
-    '<div class="name">' + esc(sv.name || '') + '</div>' +
+  for (let i = 0; i < total; i++) dots += '<i class="' + (i < done ? 'f' : '') + '"></i>';
+  $('#stage').innerHTML = '<div class="prog"><div class="nm">' + esc(sv.name || '') + '</div>' +
     '<div class="dots">' + dots + '</div>' +
     '<div class="cnt"><b>' + done + '</b> / ' + total + ' 명 제출</div></div>';
 }
 
 function drawReveal(sid, fresh){
+  const subs = subList();
+  const idx = subs.findIndex(([k]) => k === sid);
   const sv = (D.subjects||{})[sid] || {};
   const a = (D.aggregate||{})[sid];
   if (!a || !num(a.n)) {
-    $('#stage').innerHTML = '<div class="idle"><div class="k">' + esc(sv.name||'') + '</div><div class="s">아직 제출된 점수가 없습니다</div></div>';
+    $('#stage').innerHTML = '<div class="idle"><div class="k">' + esc(sv.name||'') + '</div>' +
+      '<div class="s">아직 제출된 점수가 없습니다</div><div class="tick"></div></div>';
     return;
   }
   const mx = Math.max(1, num(a.maxTotal, 100));
   const cri = criList();
-  const meta = a.n + '명 제출' + (a.trimmed ? ' · 최고·최저 제외 ' + a.used + '명 반영' : '');
-  $('#stage').innerHTML = '<div class="rev">' +
-    '<div class="name">' + esc(sv.name || '') + '</div>' +
-    '<div class="meta">' + meta + '</div>' +
-    '<div class="bigrow"><span class="big" id="bigv">0<span class="den"> / ' + mx + '</span></span></div>' +
-    '<div class="meter"><div class="rail"></div><div class="fill" id="mfill"></div>' +
-      '<div class="tick"></div><div class="tick major"></div><div class="needle" id="mneedle"></div>' +
-      '<div class="ends"><span>0</span><span>' + Math.round(mx/2) + '</span><span>' + mx + '</span></div></div>' +
-    '<div class="crilist">' + cri.map(([cid,cv]) => {
-      const v = num((a.byCriteria||{})[cid]);
-      const cm = Math.max(1, num(cv.max, 25));
-      return '<div class="crirow"><div class="l"><span>' + esc(cv.label) + '</span>' +
-        '<b>' + v.toFixed(1) + '<span style="color:var(--fg-3);font-size:.7em;font-weight:400"> / ' + cm + '</span></b></div>' +
-        '<div class="b"><i data-w="' + Math.max(0,Math.min(100, v/cm*100)) + '"></i></div></div>';
-    }).join('') + '</div></div>';
-
   const pct = Math.max(0, Math.min(100, a.avg / mx * 100));
+
+  $('#stage').innerHTML =
+  '<div class="rev">' +
+    '<div class="head">' +
+      '<div class="seq">' + String(idx + 1).padStart(2,'0') + '<small>/ ' + String(subs.length).padStart(2,'0') + '</small></div>' +
+      '<div class="who"><h1>' + esc(sv.name || '') + '</h1>' +
+        (sv.desc ? '<p>' + esc(sv.desc) + '</p>' : '') + '</div>' +
+      '<div class="stamp"><b>' + a.n + '명</b>제출 기준' +
+        (a.trimmed ? '<br>최고·최저 제외 ' + a.used + '명' : '') + '</div>' +
+    '</div>' +
+    '<div class="board">' +
+      '<section class="plate"><h3>종합 평균</h3><div class="in">' +
+        '<div class="big" id="big">0<em> / ' + mx + '</em></div>' +
+        '<div class="gauge"><div class="rail"><div class="fill" id="gf"></div><div class="pin" id="gp"></div></div>' +
+          '<div class="ticks"></div>' +
+          '<div class="ends"><span>0</span><span>' + Math.round(mx/2) + '</span><span>' + mx + '</span></div>' +
+        '</div>' +
+      '</div></section>' +
+      '<section class="plate"><h3>문항별 평균</h3><div class="in"><div class="bars">' +
+        cri.map(([cid,cv]) => {
+          const v = num((a.byCriteria||{})[cid]);
+          const cm = Math.max(1, num(cv.max, 25));
+          const h = Math.max(0, Math.min(100, v / cm * 100));
+          return '<div class="bar">' +
+            '<div class="v">' + v.toFixed(1) + '<em> /' + cm + '</em></div>' +
+            '<div class="track"><i data-h="' + h + '"></i></div>' +
+            '<div class="nm">' + esc(cv.label) + '</div></div>';
+        }).join('') +
+      '</div></div></section>' +
+    '</div>' +
+  '</div>';
+
   requestAnimationFrame(() => {
-    $('#mfill').style.width = 'calc(' + pct + '% - 2px)';
-    $('#mneedle').style.left = 'calc(' + pct + '% - 1.5px)';
-    document.querySelectorAll('.crirow .b i').forEach(i => i.style.width = i.dataset.w + '%');
+    $('#gf').style.width = pct + '%';
+    $('#gp').style.left = 'calc(' + pct + '% - 1.5px)';
+    document.querySelectorAll('.bar .track i').forEach(i => i.style.height = i.dataset.h + '%');
   });
-  countUp($('#bigv'), a.avg, mx, fresh && !reduce);
+  countUp($('#big'), a.avg, mx, fresh && !slow);
 }
 
 function countUp(el, target, mx, animate){
-  const den = ' / ' + mx;
-  const put = v => el.innerHTML = v.toFixed(2) + '<span class="den">' + den + '</span>';
+  const put = v => el.innerHTML = v.toFixed(2) + '<em> / ' + mx + '</em>';
   if (!animate) { put(target); return; }
-  const dur = 1100, t0 = performance.now();
+  const dur = 1150, t0 = performance.now();
   (function step(t){
     const p = Math.min(1, (t - t0) / dur);
     put(target * (1 - Math.pow(1 - p, 3)));
@@ -231,22 +272,24 @@ function countUp(el, target, mx, animate){
 }
 
 function drawRank(){
-  const subs = subList(), agg = D.aggregate || {};
-  const scored = subs.filter(([sid]) => agg[sid] && num(agg[sid].n) > 0);
+  const agg = D.aggregate || {};
+  const scored = subList().filter(([sid]) => agg[sid] && num(agg[sid].n) > 0);
   if (!scored.length) { drawIdle(); return; }
   const mx = Math.max(1, num((agg[scored[0][0]]||{}).maxTotal, 100));
   const ranked = scored.slice().sort((a,b) => num(agg[b[0]].avg) - num(agg[a[0]].avg));
-  $('#stage').innerHTML = '<div class="rank"><h3>종합 결과 · 만점 ' + mx + '점</h3>' +
+  $('#stage').innerHTML = '<div class="rank">' +
+    '<h2>종합 결과<span>만점 ' + mx + '점 · ' + ranked.length + '건</span></h2><div class="rlist">' +
     ranked.map(([sid,sv], i) => {
       const a = agg[sid];
       const w = Math.max(0, Math.min(100, a.avg / mx * 100));
       return '<div class="r ' + (i===0?'top':'') + '">' +
-        '<div class="pos">' + (i+1) + '</div>' +
-        '<div class="nm">' + esc(sv.name) + '</div>' +
-        '<div class="bar"><i data-w="' + w + '"></i></div>' +
-        '<div class="av">' + num(a.avg).toFixed(2) + '</div></div>';
-    }).join('') + '</div>';
-  requestAnimationFrame(() => document.querySelectorAll('.rank .bar i').forEach(i => i.style.width = i.dataset.w + '%'));
+        '<div class="p mono">' + (i+1) + '</div>' +
+        '<div class="n">' + esc(sv.name) + '</div>' +
+        '<div class="b"><i data-w="' + w + '"></i></div>' +
+        '<div class="s mono">' + num(a.avg).toFixed(2) + '</div></div>';
+    }).join('') + '</div>' +
+    '<div class="foot">개별 점수와 평가자는 표시되지 않습니다</div></div>';
+  requestAnimationFrame(() => document.querySelectorAll('.r .b i').forEach(i => i.style.width = i.dataset.w + '%'));
 }
 
 drawIdle();

@@ -152,7 +152,6 @@ input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--ink);height:26px}
   </section>
 
   <!-- 채점 -->
-  <div id="noSess" class="banner warn hidden"></div>
   <div id="nav" class="nav hidden"></div>
   <div id="board" class="hidden"></div>
   <div class="sessline"><span id="sessInfo">연결 중</span><span id="buildInfo"></span></div>
@@ -172,7 +171,7 @@ input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--ink);height:26px}
    Firebase 콘솔 > Realtime Database 화면 맨 위 주소를 그대로 넣으세요.
    ══════════════════════════════════════════════════════════════ */
 const DATABASE_URL = "https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app";
-const BUILD = "2026-09-17g";   /* 화면 아래에 표시됩니다. 세 파일의 값이 같은지로 갱신 여부를 확인하세요 */
+const BUILD = "2026-09-17h";   /* 화면 아래에 표시됩니다. 세 파일의 값이 같은지로 갱신 여부를 확인하세요 */
 
 const firebaseConfig = {
   apiKey: "AIzaSyCXGmsExbOCnvxDZpXcL1A10FlKeGZjjUI",
@@ -224,39 +223,21 @@ setTimeout(() => { if (!ok) { $('#dbWarn').classList.remove('hidden'); $('#dbWar
 /* ── 어느 세션에 붙을지 ──
    주소에 ?s=코드 가 있으면 그 세션을 고정으로 씨고,
    없으면 admin 에서 지정한 '지금 쓰는 세션'에 자동으로 붙습니다. */
-const FIXED = clean(new URLSearchParams(location.search).get('s'));
-let CODE = null, S = null, LK = null, ACTIVE_SET = false;
-let ME = null, MYSC = {};
+/* 세션 개념 없음 — 항상 라이브 한 곳만 봅니다. 주소에 붙일 값도 없습니다. */
+const S = db.ref('live');
+const LK = { me: 'sc.live.me', sc: 'sc.live.scores', sent: 'sc.live.sent', reset: 'sc.live.reset' };
+let ME = lsGet(LK.me, null), MYSC = lsGet(LK.sc, {});
 let D = { config:{}, criteria:{}, subjects:{}, progress:{} };
 let draft = {};
 let SEL = null;   // 지금 보고 있는 평가 대상
 
-if (FIXED) { ACTIVE_SET = true; boot(FIXED); }
-else db.ref('activeSession').on('value', s => {
-  const v = clean(s.val());
-  ACTIVE_SET = !!v;
-  const c = v || 'main';
-  if (CODE === null) boot(c);
-  else if (c !== CODE) location.reload();
-  else paintSess();
-});
-function paintSess(){
-  $('#buildInfo').textContent = '화면 ' + BUILD;
-  $('#sessInfo').textContent = '세션 ' + (CODE || '—') + ' · ' + (rosterMode() ? '사번 입장' : '직접 등록');
-  const warn = !ACTIVE_SET && !FIXED;
-  $('#noSess').classList.toggle('hidden', !warn);
-  if (warn) $('#noSess').innerHTML = '운영자가 아직 이 주소에 세션을 연결하지 않아 기본 세션(<b>main</b>)을 보고 있습니다. 운영자 화면에서 <b>이 세션을 지금 쓰는 세션으로 지정</b>을 눌러 주세요.';
-}
+['config','criteria','subjects','progress'].forEach(p =>
+  S.child(p).on('value', s => { D[p] = s.val() || {}; render(); }));
+watchMe();
 
-function boot(code){
-  CODE = code;
-  S = db.ref('sessions/' + CODE);
-  LK = { me: 'sc.' + CODE + '.me', sc: 'sc.' + CODE + '.scores', sent: 'sc.' + CODE + '.sent', reset: 'sc.' + CODE + '.reset' };
-  ME = lsGet(LK.me, null);
-  MYSC = lsGet(LK.sc, {});
-  ['config','criteria','subjects','progress'].forEach(p => S.child(p).on('value', s => { D[p] = s.val() || {}; render(); }));
-  watchMe();
-  render();
+function paintSess(){
+  $('#sessInfo').textContent = (rosterMode() ? '사번 입장' : '직접 등록');
+  $('#buildInfo').textContent = '화면 ' + BUILD;
 }
 
 function criList(){ return Object.entries(D.criteria||{}).sort((a,b)=>num(a[1].order)-num(b[1].order)); }
@@ -284,7 +265,6 @@ function knockout(){
    pass/{사번} 은 정확한 사번을 알아야 그 한 칸만 읽힙니다. 명단 전체 조회는 막혀 있습니다. */
 function regErr(msg){ const b = $('#regErr'); b.classList.remove('hidden'); b.textContent = msg; }
 $('#btnJoin').onclick = () => {
-  if (!S) return;
   const key = empKey($('#jNo').value);
   if (!key) { regErr('사번을 입력해 주세요.'); $('#jNo').focus(); return; }
   $('#regErr').classList.add('hidden');
@@ -293,7 +273,7 @@ $('#btnJoin').onclick = () => {
     const p = sn.val();
     btn.disabled = false; btn.textContent = '입장';
     if (!p || !p.rid) {
-      regErr('명단에 없는 사번입니다. 운영자에게 문의해 주세요.  [세션 ' + CODE + ' · 조회한 사번 ' + key + ']');
+      regErr('명단에 없는 사번입니다. 운영자에게 문의해 주세요.  [조회한 사번 ' + key + ']');
       return;
     }
     ME = { rid: p.rid, name: p.name || '', dept: p.dept || '', position: p.position || '', empno: key, at: Date.now() };
@@ -309,7 +289,6 @@ $('#jNo').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnJoin'
 
 /* ── 직접 등록 (자유 입장 방식) ── */
 $('#btnReg').onclick = () => {
-  if (!S) return;
   const name = $('#rName').value.trim();
   if (!name) { const b = $('#regErr'); b.classList.remove('hidden'); b.textContent = '성명을 입력해 주세요.'; $('#rName').focus(); return; }
   const rid = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
@@ -341,7 +320,6 @@ function rosterMode(){ return (D.config||{}).joinMode !== 'open'; }
 /* 운영자가 채점을 초기화하면 이 기기에 남은 점수 값도 함께 지웁니다.
    제출 여부 자체는 서버 표식으로 판정하므로 초기화 즉시 사라집니다. */
 function applyReset(){
-  if (!LK) return;
   const r = num((D.config||{}).resetAt, 0);
   if (!r) return;
   const seen = num(lsGet(LK.reset, 0), 0);
@@ -358,7 +336,7 @@ function showReg(){
   $('#board').classList.add('hidden');
   $('#nav').classList.add('hidden');
   $('#btnReset').classList.add('hidden');
-  $('#hMe').textContent = CODE ? '입장 전' : '연결 중';
+  $('#hMe').textContent = '입장 전';
   const r = rosterMode();
   $('#regRoster').classList.toggle('hidden', !r);
   $('#regOpen').classList.toggle('hidden', r);
