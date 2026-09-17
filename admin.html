@@ -80,6 +80,7 @@ tr.dim td{color:var(--ink-3)}
 .matrix td.cell{text-align:center;padding:4px;font-family:var(--mono);font-size:12px}
 .matrix td.cell.miss{background:#fbeef0;color:var(--stop)}
 .matrix td.cell.stale{background:#fdf6e6;color:#7a5a05;font-weight:600}
+.matrix td.cell.away{background:var(--panel-2);color:var(--line)}
 .matrix td.cell{cursor:pointer}
 .matrix td.cell:hover{outline:2px solid var(--go);outline-offset:-2px}
 .matrix td.cell.ed::before{content:"\270E ";color:var(--hold)}
@@ -214,9 +215,9 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
             <div style="font-size:12px;color:var(--ink-2);margin-top:5px" id="editHint">켜 두면 3팀 발표 중에 1·2팀 점수를 수정할 수 있습니다. 결과 공개 직전에 꺼서 잠그세요.</div>
             <div style="font-size:12px;color:var(--ink-3);margin-top:3px">이 설정은 <b>마감</b> 상태인 대상에만 걸립니다. <b>열림</b> 상태는 항상 채점할 수 있고, 마감된 대상을 다시 열림으로 되돌리는 것은 언제든 가능합니다.</div>
           </div></div>
-          <div class="fieldrow"><span>심사위원 수</span><div class="row">
-            <span class="num" id="raterN" style="font-size:18px">0</span>
-            <span style="color:var(--ink-2);font-size:12px">명 등록됨 — 공개 화면의 제출 진행률 분모로 쓰입니다</span>
+          <div class="fieldrow"><span>심사위원</span><div class="row">
+            <span class="num" id="raterN" style="font-size:15px">—</span>
+            <span style="color:var(--ink-2);font-size:12px">공개 화면의 진행률 분모는 <b>실제 입장한 사람</b> 기준입니다. 사전 등록만 하고 오지 않은 사람은 분모에 들어가지 않습니다.</span>
           </div></div>
         </div>
       </section>
@@ -318,6 +319,14 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
     </div>
   </div>
 </div>
+<div id="dlg" class="modal hidden" style="z-index:60"><div class="mbox" style="max-width:420px">
+  <h3 id="dlgTitle"></h3>
+  <div class="mbody"><div id="dlgMsg"></div>
+    <input type="text" id="dlgInput" class="hidden" style="width:100%;margin-top:12px;font-family:var(--mono)"></div>
+  <div class="mfoot"><span style="margin-left:auto"></span>
+    <button id="dlgCancel" class="ghost">취소</button>
+    <button id="dlgOk" class="primary">확인</button></div>
+</div></div>
 <div id="modal" class="modal hidden"><div class="mbox">
   <h3 id="mTitle"></h3>
   <div class="mbody" id="mBody"></div>
@@ -366,6 +375,29 @@ const $$ = s => Array.from(document.querySelectorAll(s));
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = (v,d=0) => { const n = Number(v); return isFinite(n) ? n : d; };
 const clean = c => String(c||'').trim().replace(/[.#$\[\]\/\s]/g,'');
+/* ── 화면 안 대화상자 (브라우저 기본 창을 쓰지 않습니다) ── */
+let dlgRes = null;
+function dialog(o){
+  return new Promise(res => {
+    dlgRes = res;
+    $('#dlgTitle').textContent = o.title || '확인';
+    $('#dlgMsg').innerHTML = o.msg || '';
+    const inp = $('#dlgInput');
+    if (o.input) { inp.classList.remove('hidden'); inp.value = o.input.value || ''; inp.placeholder = o.input.placeholder || ''; }
+    else inp.classList.add('hidden');
+    const ok = $('#dlgOk');
+    ok.textContent = o.ok || '확인';
+    ok.className = o.danger ? 'danger' : 'primary';
+    $('#dlgCancel').classList.toggle('hidden', o.cancel === null);
+    $('#dlg').classList.remove('hidden');
+    setTimeout(() => (o.input ? inp : ok).focus(), 30);
+  });
+}
+function dlgClose(v){ $('#dlg').classList.add('hidden'); const r = dlgRes; dlgRes = null; if (r) r(v); }
+const notify  = (msg, title) => dialog({ title: title || '알림', msg, cancel: null });
+const ask     = (msg, o) => dialog(Object.assign({ title: '확인', msg }, o || {}));
+const askText = (msg, value, o) => dialog(Object.assign({ title: '입력', msg, input: { value: value || '', placeholder: (o||{}).placeholder || '' } }, o || {}));
+
 function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),1800); }
 
 /* ── 연결 확인 ──────────────────────────────────────────── */
@@ -434,7 +466,7 @@ function openSession(code){
   bind('subjects', () => { renderSubjects(); renderMatrix(); renderResults(); renderScreenCtl(); schedule(); });
   bind('raters',   () => { gotRaters = true; renderRaters(); renderMatrix(); syncRoster(); });
   bind('pass',     () => {});
-  bind('roster',   () => { gotRoster = true; syncRoster(); });
+  bind('roster',   () => { gotRoster = true; syncRoster(); renderRaters(); renderMatrix(); renderResults(); });
   bind('scores',   () => { renderCriteria(); renderMatrix(); renderResults(); schedule(); });
   bind('screen',   () => renderScreenCtl());
 }
@@ -453,23 +485,24 @@ $('#btnActivate').onclick = () => db.ref('activeSession').set(CODE)
   .catch(() => toast('지정하지 못했습니다. 보안 규칙을 다시 게시해 주세요'));
 $('#btnOpenSess').onclick = () => openSession($('#codeInput').value);
 $('#sessList').onchange = e => { if (e.target.value) openSession(e.target.value); };
-$('#btnNewSess').onclick = () => {
+$('#btnNewSess').onclick = async () => {
   const d = new Date(), p = n => String(n).padStart(2,'0');
-  const code = `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}`;
-  const c = prompt('새 세션 코드를 입력하세요. 짧고 기억하기 쉬운 값이 좋습니다.', code);
-  if (!c) return;
-  const clean = c.trim().replace(/[.#$\[\]\/\s]/g,'');
-  db.ref('sessions/'+clean+'/config').update({ title:'', mode:'simple', allowEditClosed:true, createdAt: Date.now() });
-  db.ref('sessionIndex/'+clean).set({ title:'', createdAt: Date.now() });
-  openSession(clean); loadSessionList();
+  const def = `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}`;
+  const c = await askText('새 세션 코드를 입력하세요. 짧고 기억하기 쉬운 값이 좋습니다.', def, { title: '새 세션' });
+  if (c === null) return;
+  const nc = clean(c);
+  if (!nc) { await notify('세션 코드가 비어 있습니다.'); return; }
+  db.ref('sessions/'+nc+'/config').update({ title:'', mode:'simple', allowEditClosed:true, joinMode:'roster', createdAt: Date.now() });
+  db.ref('sessionIndex/'+nc).set({ title:'', createdAt: Date.now() });
+  openSession(nc); loadSessionList();
 };
 /* ── 세션 복제 · 초기화 · 삭제 ─────────────────────────── */
-$('#btnDup').onclick = () => {
-  const c = prompt('복제할 새 세션 코드를 입력하세요. 문항과 평가 대상 구조만 가져오고, 점수와 명단은 가져오지 않습니다.', CODE + '-2');
-  if (!c) return;
+$('#btnDup').onclick = async () => {
+  const c = await askText('복제할 새 세션 코드를 입력하세요. 문항과 평가 대상 구조만 가져오고, 점수와 명단은 가져오지 않습니다.', CODE + '-2', { title: '세션 복제' });
+  if (c === null) return;
   const nc = clean(c); if (!nc) return;
-  db.ref('sessions/' + nc + '/config').once('value').then(sn => {
-    if (sn.exists()) { alert('이미 있는 세션 코드입니다.'); return null; }
+  db.ref('sessions/' + nc + '/config').once('value').then(async sn => {
+    if (sn.exists()) { await notify('이미 있는 세션 코드입니다.'); return null; }
     const subs = {};
     Object.entries(D.subjects || {}).forEach(([k,v]) => subs[k] = { name:v.name, desc:v.desc||'', state:'ready', order:num(v.order) });
     const payload = {
@@ -481,27 +514,28 @@ $('#btnDup').onclick = () => {
     return db.ref('sessions/' + nc).set(payload)
       .then(() => db.ref('sessionIndex/' + nc).set({ title: payload.config.title, createdAt: Date.now() }))
       .then(() => { openSession(nc); loadSessionList(); toast('복제했습니다'); });
-  }).catch(() => alert('복제하지 못했습니다.'));
+  }).catch(() => notify('복제하지 못했습니다.'));
 };
-$('#btnWipeScores').onclick = () => {
-  if (!confirm('이 세션의 제출 점수를 모두 지웁니다. 문항·대상·심사위원 명단은 그대로 둡니다.\n리허설 후 실전 직전에 쓰는 기능입니다.')) return;
+$('#btnWipeScores').onclick = async () => {
+  if (!await ask('이 세션의 제출 점수를 모두 지웁니다. 문항·대상·심사위원 명단은 그대로 둡니다.<br><br>리허설 후 실전 직전에 쓰는 기능입니다.', { title:'점수 초기화', ok:'초기화', danger:true })) return;
   S.update({ scores: null, aggregate: null }).then(() => toast('점수를 초기화했습니다'));
 };
-$('#btnWipeAll').onclick = () => {
-  if (!confirm('제출 점수와 심사위원 명단을 모두 지웁니다. 접속 중인 심사위원은 즉시 등록 화면으로 돌아갑니다.\n문항과 평가 대상은 남습니다.')) return;
+$('#btnWipeAll').onclick = async () => {
+  if (!await ask('제출 점수와 심사위원 명단을 모두 지웁니다. 접속 중인 심사위원은 즉시 입장 화면으로 돌아갑니다.<br><br>문항과 평가 대상은 남습니다.', { title:'명단·점수 초기화', ok:'초기화', danger:true })) return;
   const u = { scores: null, aggregate: null, raters: null, roster: null, pass: null };
   Object.keys(D.raters || {}).forEach(rid => u['revoked/' + rid] = true);
   S.update(u).then(() => toast('명단과 점수를 초기화했습니다'));
 };
-$('#btnDelSess').onclick = () => {
-  const a = prompt('세션 전체를 삭제합니다. 되돌릴 수 없습니다.\n지우려면 세션 코드를 그대로 입력하세요: ' + CODE);
-  if (clean(a) !== CODE) { if (a !== null) alert('코드가 일치하지 않아 취소했습니다.'); return; }
+$('#btnDelSess').onclick = async () => {
+  const a = await askText('세션 전체를 삭제합니다. 되돌릴 수 없습니다.<br>지우려면 아래에 세션 코드 <b>' + esc(CODE) + '</b> 를 그대로 입력하세요.', '', { title:'세션 삭제', ok:'삭제', danger:true, placeholder: CODE });
+  if (a === null) return;
+  if (clean(a) !== CODE) { await notify('코드가 일치하지 않아 취소했습니다.'); return; }
   const after = () => { openSession('main'); loadSessionList(); toast('세션을 삭제했습니다'); };
   db.ref('sessions/' + CODE).remove()
     .then(() => db.ref('sessionIndex/' + CODE).remove())
     .then(() => (ACTIVE === CODE ? db.ref('activeSession').remove() : null))
     .then(after)
-    .catch(() => alert('삭제하지 못했습니다.'));
+    .catch(() => notify('삭제하지 못했습니다.'));
 };
 
 function loadSessionList(){
@@ -517,6 +551,16 @@ function loadSessionList(){
 }
 
 /* ── 탭 ─────────────────────────────────────────────────── */
+$('#dlgOk').onclick = () => dlgClose($('#dlgInput').classList.contains('hidden') ? true : $('#dlgInput').value);
+$('#dlgCancel').onclick = () => dlgClose(null);
+$('#dlg').onclick = e => { if (e.target.id === 'dlg') dlgClose(null); };
+$('#dlgInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#dlgOk').click(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!$('#dlg').classList.contains('hidden')) dlgClose(null);
+  else if (!$('#modal').classList.contains('hidden')) closeEdit();
+});
+
 $$('nav.tabs button').forEach(b => b.onclick = () => {
   $$('nav.tabs button').forEach(x => x.classList.toggle('on', x === b));
   $$('.tabpane').forEach(p => p.classList.add('hidden'));
@@ -549,9 +593,10 @@ $('#sessName').addEventListener('keydown', e => { if (e.key === 'Enter') saveNam
 $$('input[name=join]').forEach(r => r.onchange = () => { if (r.checked) S.child('config/joinMode').set(r.value); });
 $$('input[name=mode]').forEach(r => r.onchange = () => { if (r.checked) S.child('config/mode').set(r.value); });
 $('#cEdit').onchange = e => S.child('config/allowEditClosed').set(e.target.checked);
+function enteredCount(){ return Object.keys(D.roster || {}).length; }
 function syncRoster(){
   const rs = D.raters || {};
-  $('#raterN').textContent = Object.keys(rs).length;
+  $('#raterN').innerHTML = '명단 <b>' + Object.keys(rs).length + '</b>명 · 입장 <b>' + enteredCount() + '</b>명';
   if (!gotRaters || !gotRoster) return;
   Object.keys(D.roster || {}).forEach(rid => { if (!rs[rid]) S.child('roster/' + rid).remove().catch(()=>{}); });
 }
@@ -588,9 +633,9 @@ function renderCriteria(){
     if (f === 'max') e.target.value = val;
     S.child('criteria/' + k + '/' + f).set(val);
   });
-  tb.querySelectorAll('button[data-del]').forEach(b => b.onclick = e => {
+  tb.querySelectorAll('button[data-del]').forEach(b => b.onclick = async e => {
     const k = e.target.closest('tr').dataset.k;
-    if (!confirm('이 문항을 삭제합니다. 이미 입력된 해당 문항 점수는 집계에서 빠집니다.')) return;
+    if (!await ask('이 문항을 삭제합니다. 이미 입력된 해당 문항 점수는 집계에서 빠집니다.', { title:'문항 삭제', ok:'삭제', danger:true })) return;
     criSig = ''; S.child('criteria/' + k).remove();
   });
 }
@@ -599,8 +644,8 @@ $('#btnAddCri').onclick = () => {
   criSig = '';
   S.child('criteria').push({ label: '문항 ' + (n+1), desc: '', max: 25, order: n + 1 });
 };
-$('#btnPreset').onclick = () => {
-  if (criList().length && !confirm('기존 문항 뒤에 4개를 더 추가합니다. 계속할까요?')) return;
+$('#btnPreset').onclick = async () => {
+  if (criList().length && !await ask('기존 문항 뒤에 4개를 더 추가합니다. 계속할까요?', { title:'기본 문항 추가' })) return;
   const base = criList().length;
   const P = [
     ['문제 정의','해결하려는 문제가 구체적이고 근거가 있는가'],
@@ -642,9 +687,9 @@ function renderSubjects(){
       const k = e.target.closest('tr').dataset.k;
       S.child('subjects/' + k + '/state').set(e.target.dataset.st);
     });
-    tb.querySelectorAll('button[data-del]').forEach(b => b.onclick = e => {
+    tb.querySelectorAll('button[data-del]').forEach(b => b.onclick = async e => {
       const k = e.target.closest('tr').dataset.k;
-      if (!confirm('이 대상과 해당 점수를 모두 삭제합니다.')) return;
+      if (!await ask('이 대상과 해당 점수를 모두 삭제합니다.', { title:'대상 삭제', ok:'삭제', danger:true })) return;
       subSig = '';
       S.child('subjects/' + k).remove();
       S.child('scores/' + k).remove();
@@ -671,10 +716,16 @@ $('#btnBulk').onclick = () => {
   for (let i = 0; i < n; i++) S.child('subjects').push({ name: (base+i+1) + '팀', desc:'', state:'ready', order: base+i+1 });
   toast(n + '건을 만들었습니다');
 };
-$('#btnAllOpen').onclick = () => { if (confirm('모든 대상을 동시에 엽니다. 순차 진행이 아니라 일괄 채점 방식이 됩니다.')) subList().forEach(([k]) => S.child('subjects/'+k+'/state').set('open')); };
-$('#btnAllClose').onclick = () => { if (confirm('모든 대상을 마감합니다.')) subList().forEach(([k]) => S.child('subjects/'+k+'/state').set('closed')); };
-$('#btnLockAll').onclick = () => {
-  if (!confirm('모든 대상을 마감하고, 마감된 대상의 수정 허용도 함께 끕니다. 결과 공개 직전에 쓰는 기능입니다.')) return;
+$('#btnAllOpen').onclick = async () => {
+  if (!await ask('모든 대상을 동시에 엽니다. 순차 진행이 아니라 일괄 채점 방식이 됩니다.', { title:'전체 열기' })) return;
+  subList().forEach(([k]) => S.child('subjects/'+k+'/state').set('open'));
+};
+$('#btnAllClose').onclick = async () => {
+  if (!await ask('모든 대상을 마감합니다.', { title:'전체 마감' })) return;
+  subList().forEach(([k]) => S.child('subjects/'+k+'/state').set('closed'));
+};
+$('#btnLockAll').onclick = async () => {
+  if (!await ask('모든 대상을 마감하고, 마감된 대상의 수정 허용도 함께 끕니다. 결과 공개 직전에 쓰는 기능입니다.', { title:'전체 잠금', ok:'잠금' })) return;
   const u = { 'config/allowEditClosed': false };
   subList().forEach(([k]) => u['subjects/' + k + '/state'] = 'closed');
   S.update(u).then(() => toast('전체 잠금 완료'));
@@ -692,8 +743,8 @@ function renderMatrix(){
   const { detail } = computeAll();
   let staleTotal = 0;
   let h = '<table class="matrix"><tbody><tr><th style="min-width:110px">대상</th>';
-  rats.forEach(([,v]) => h += `<th class="vert">${esc(v.name)}</th>`);
-  h += '<th class="n" style="width:66px">제출</th></tr>';
+  rats.forEach(([rid,v]) => h += `<th class="vert" style="${(D.roster||{})[rid]?'':'color:var(--ink-3)'}">${esc(v.name)}${(D.roster||{})[rid]?'':'<br><span style="font-weight:400;font-size:10px">미입장</span>'}</th>`);
+  h += '<th class="n" style="width:74px">제출</th></tr>';
   subs.forEach(([sid,sv]) => {
     const det = detail[sid] || {};
     const n = rats.filter(([rid]) => det[rid] && det[rid].complete).length;
@@ -701,14 +752,14 @@ function renderMatrix(){
     rats.forEach(([rid]) => {
       const d = det[rid];
       const a = `data-sid="${sid}" data-rid="${rid}" title="눌러서 수정"`;
-      if (!d) { h += `<td class="cell miss" ${a}>·</td>`; return; }
+      if (!d) { h += `<td class="cell ${(D.roster||{})[rid] ? 'miss' : 'away'}" ${a}>${(D.roster||{})[rid] ? '·' : '–'}</td>`; return; }
       if (!d.complete) { staleTotal++; h += `<td class="cell stale" ${a} title="문항이 바뀌어 다시 제출이 필요합니다 · 눌러서 수정">!</td>`; return; }
       h += `<td class="cell ${d.edited?'ed':''}" ${a}>${d.total}</td>`;
     });
-    h += `<td class="n">${n}/${rats.length}</td></tr>`;
+    h += `<td class="n">${n}/${Math.max(enteredCount(), n)}</td></tr>`;
   });
   h += '</tbody></table>';
-  if (maxTotal) h += `<p style="color:var(--ink-2);font-size:12px;margin:10px 0 0">칸의 숫자는 현재 배점으로 다시 계산한 총점입니다 (만점 ${maxTotal}점). <span style="color:var(--stop)">·</span> 은 미제출입니다.</p>`;
+  if (maxTotal) h += `<p style="color:var(--ink-2);font-size:12px;margin:10px 0 0">칸의 숫자는 현재 배점으로 다시 계산한 총점입니다 (만점 ${maxTotal}점). <span style="color:var(--stop)">·</span> 은 입장했는데 미제출, <span style="color:var(--ink-3)">–</span> 는 아직 입장하지 않은 사람입니다.</p>`;
   if (staleTotal) h += `<p style="color:#7a5a05;font-size:12.5px;margin:6px 0 0"><b>!</b> 표시 ${staleTotal}건은 제출 이후 문항이 추가되어 값이 빠진 제출입니다. 집계에서 제외되며, 해당 대상을 다시 열어 재제출을 받아야 합니다.</p>`;
   h += '<p style="color:var(--ink-3);font-size:12px;margin:6px 0 0">칸을 누르면 그 심사위원의 점수를 직접 고치거나 대신 입력할 수 있습니다. 운영자가 고친 칸에는 \u270E 표시가 붙습니다.</p>';
   $('#matrix').innerHTML = h;
@@ -758,14 +809,15 @@ $('#mSave').onclick = () => {
     const val = Math.max(0, Math.min(num(cv.max,0), Math.round(num(el.value))));
     v[cid] = val; total += val;
   });
-  if (miss) { alert('모든 문항에 점수를 입력하세요.'); return; }
+  if (miss) { notify('모든 문항에 점수를 입력하세요.'); return; }
   S.child('scores/' + EDIT.sid + '/' + EDIT.rid)
     .set({ v, total, at: EDIT.at, edited: true, editedAt: Date.now() })
     .then(() => { closeEdit(); toast('점수를 수정했습니다'); })
-    .catch(() => alert('저장하지 못했습니다.'));
+    .catch(() => notify('저장하지 못했습니다.'));
 };
-$('#mDel').onclick = () => {
-  if (!EDIT || !confirm('이 심사위원의 이 대상 점수를 삭제합니다.')) return;
+$('#mDel').onclick = async () => {
+  if (!EDIT) return;
+  if (!await ask('이 심사위원의 이 대상 점수를 삭제합니다.', { title:'점수 삭제', ok:'삭제', danger:true })) return;
   S.child('scores/' + EDIT.sid + '/' + EDIT.rid).remove()
     .then(() => { closeEdit(); toast('삭제했습니다'); });
 };
@@ -789,7 +841,6 @@ $('#btnPasteGo').onclick = () => {
     const rid = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
     const at = Date.now();
     u['raters/' + rid] = { name, empno, dept, position, at };
-    u['roster/' + rid] = at;
     u['pass/' + empno] = { rid, name, dept, position };
     ok++;
   });
@@ -804,22 +855,24 @@ $('#btnPasteGo').onclick = () => {
 function renderRaters(){
   const rats = raterList();
   const roster = (D.config||{}).joinMode === 'open' ? '누구나 신상 입력 후 입장' : '사전 등록 명단만 입장';
-  $('#rosterNote').textContent = rats.length + '명 · ' + roster;
+  $('#rosterNote').textContent = '명단 ' + rats.length + '명 · 입장 ' + enteredCount() + '명 · ' + roster;
   const tb = $('#raterTable').querySelector('tbody');
   if (!rats.length) { tb.innerHTML = '<tr><td style="color:var(--ink-3)">아직 등록한 심사위원이 없습니다. 위에서 명단을 붙여넣어 등록하세요.</td></tr>'; return; }
   const totalSubs = subList().length;
-  tb.innerHTML = '<tr><th style="width:36px">#</th><th>성명</th><th>사번</th><th>소속</th><th>직위</th><th class="n" style="width:80px">제출</th><th style="width:60px"></th></tr>' +
+  tb.innerHTML = '<tr><th style="width:36px">#</th><th>성명</th><th>사번</th><th>소속</th><th>직위</th><th style="width:70px">입장</th><th class="n" style="width:80px">제출</th><th style="width:60px"></th></tr>' +
     rats.map(([rid,v],i) => {
       const done = subList().filter(([sid]) => ((D.scores||{})[sid]||{})[rid]).length;
-      return `<tr data-rid="${rid}" class="${done?'':'dim'}">
+      const inRoom = !!(D.roster||{})[rid];
+      return `<tr data-rid="${rid}" class="${inRoom?'':'dim'}">
         <td class="n">${i+1}</td><td>${esc(v.name)}</td><td class="n">${esc(v.empno||'')}</td>
         <td>${esc(v.dept||'')}</td><td>${esc(v.position||'')}</td>
+        <td><span class="pill ${inRoom?'go':''}">${inRoom?'입장':'미입장'}</span></td>
         <td class="n">${done}/${totalSubs}</td>
         <td><button class="danger" data-del="1">삭제</button></td></tr>`;
     }).join('');
-  tb.querySelectorAll('button[data-del]').forEach(b => b.onclick = e => {
+  tb.querySelectorAll('button[data-del]').forEach(b => b.onclick = async e => {
     const rid = e.target.closest('tr').dataset.rid;
-    if (!confirm('이 심사위원과 제출한 점수를 모두 삭제합니다. 해당 심사위원 화면은 곧바로 등록 화면으로 돌아갑니다.')) return;
+    if (!await ask('이 심사위원을 명단에서 지우고 제출한 점수도 모두 삭제합니다. 접속 중이면 곧바로 입장 화면으로 돌아갑니다.', { title:'심사위원 삭제', ok:'삭제', danger:true })) return;
     const u = {};
     const emp = clean((D.raters[rid]||{}).empno);
     u['raters/' + rid] = null;
@@ -900,7 +953,7 @@ function renderResults(){
       cri.map(([cid]) => `<td class="n">${a.n ? a.byCriteria[cid].toFixed(1) : '—'}</td>`).join('') + '</tr>';
   });
   h += '</tbody></table>';
-  const miss = subs.filter(([sid]) => agg[sid].n && agg[sid].n < Object.keys(D.raters||{}).length);
+  const miss = subs.filter(([sid]) => agg[sid].n && agg[sid].n < enteredCount());
   if (miss.length) h += `<p style="color:var(--stop);font-size:12.5px;margin:10px 0 0">제출 인원이 다른 대상이 ${miss.length}건 있습니다. 평균 비교 전에 제출 현황을 확인하세요.</p>`;
   const staleN = subs.reduce((s,[sid]) => s + num(agg[sid].stale), 0);
   if (staleN) h += `<p style="color:#7a5a05;font-size:12.5px;margin:6px 0 0">문항이 바뀌어 값이 빠진 제출 ${staleN}건은 집계에서 빠져 있습니다. 제출 현황 탭에서 <b>!</b> 표시를 확인하세요.</p>`;

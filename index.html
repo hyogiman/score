@@ -102,6 +102,12 @@ input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--ink);height:26px}
 .legend{margin-top:7px;font-size:11px;color:var(--ink-3);line-height:1.5}
 .legend b{font-weight:600;color:var(--go)}
 .legend s{text-decoration:none;color:var(--stop)}
+.modal{position:fixed;inset:0;background:rgba(22,33,43,.55);display:flex;align-items:center;justify-content:center;z-index:60;padding:18px}
+.mbox{background:#fff;border:1px solid var(--ink);max-width:400px;width:100%}
+.mbox h3{margin:0;background:var(--ink);color:#eef3f6;font-size:13px;padding:9px 13px;font-weight:600}
+.mbody{padding:15px;font-size:14px;line-height:1.6}
+.mfoot{display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--line-2)}
+.mfoot button{flex:1}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;font-size:14px;border-radius:2px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:9}
 #toast.on{opacity:1}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -146,6 +152,11 @@ input[type=range]{width:100%;margin:6px 0 0;accent-color:var(--ink);height:26px}
   <div id="nav" class="nav hidden"></div>
   <div id="board" class="hidden"></div>
 </div>
+<div id="dlg" class="modal hidden"><div class="mbox">
+  <h3 id="dlgTitle"></h3>
+  <div class="mbody" id="dlgMsg"></div>
+  <div class="mfoot"><button id="dlgCancel" class="ghost">취소</button><button id="dlgOk" class="primary">확인</button></div>
+</div></div>
 <div id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -173,9 +184,29 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = (v,d=0) => { const n = Number(v); return isFinite(n) ? n : d; };
 const clean = c => String(c||'').trim().replace(/[.#$\[\]\/\s]/g,'');
+/* ── 화면 안 대화상자 (브라우저 기본 창을 쓰지 않습니다) ── */
+let dlgRes = null;
+function dialog(o){
+  return new Promise(res => {
+    dlgRes = res;
+    $('#dlgTitle').textContent = o.title || '확인';
+    $('#dlgMsg').innerHTML = o.msg || '';
+    const ok = $('#dlgOk');
+    ok.textContent = o.ok || '확인';
+    ok.className = o.danger ? 'danger' : 'primary';
+    $('#dlgCancel').classList.toggle('hidden', o.cancel === null);
+    $('#dlg').classList.remove('hidden');
+    setTimeout(() => ok.focus(), 30);
+  });
+}
+function dlgClose(v){ $('#dlg').classList.add('hidden'); const r = dlgRes; dlgRes = null; if (r) r(v); }
+const notify = (msg, title) => dialog({ title: title || '알림', msg, cancel: null });
+const ask    = (msg, o) => dialog(Object.assign({ title: '확인', msg }, o || {}));
+
 function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),1900); }
 function lsGet(k,d){ try { return JSON.parse(localStorage.getItem(k)) || d; } catch(e) { return d; } }
 function lsSet(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+
 
 /* ── 연결 확인 ── */
 let ok = false;
@@ -221,7 +252,7 @@ function watchMe(){
   if (!ME || !ME.rid) return;
   S.child('revoked/' + ME.rid).on('value', s => { if (s.val()) knockout(); });
   S.child('revoked/' + ME.rid).once('value').then(s => {
-    if (!s.val() && !rosterMode()) S.child('roster/' + ME.rid).set(num(ME.at, Date.now())).catch(()=>{});
+    if (!s.val()) S.child('roster/' + ME.rid).set(num(ME.at, Date.now())).catch(()=>{});
   }).catch(()=>{});
 }
 function knockout(){
@@ -247,6 +278,7 @@ $('#btnJoin').onclick = () => {
     if (!p || !p.rid) { regErr('명단에 없는 사번입니다. 운영자에게 문의해 주세요.'); return; }
     ME = { rid: p.rid, name: p.name || '', dept: p.dept || '', position: p.position || '', empno: key, at: Date.now() };
     lsSet(LK.me, ME);
+    S.child('roster/' + p.rid).set(ME.at).catch(()=>{});   /* 실제 입장한 사람만 분모에 들어갑니다 */
     $('#kickNote').classList.add('hidden');
     $('#reg').classList.add('hidden');
     watchMe(); render();
@@ -277,8 +309,8 @@ $('#btnReg').onclick = () => {
     b.textContent = '등록하지 못했습니다. 세션 주소가 맞는지 확인해 주세요. (' + err.code + ')';
   });
 };
-$('#btnReset').onclick = () => {
-  if (!confirm('이 기기에서 나갑니다. 서버에 제출한 점수는 그대로 남고, 같은 사번으로 다시 들어오면 이어서 볼 수 있습니다.')) return;
+$('#btnReset').onclick = async () => {
+  if (!await ask('이 기기에서 나갑니다. 서버에 제출한 점수는 그대로 남고, 같은 사번으로 다시 들어오면 이어서 볼 수 있습니다.', { title:'나가기', ok:'나가기' })) return;
   [LK.me, LK.sc, LK.sent].forEach(k => localStorage.removeItem(k));
   location.reload();
 };
@@ -505,11 +537,16 @@ function submit(sid, cri, sec){
     render();
   }).catch(err => {
     btn.disabled = false; btn.textContent = '제출';
-    alert(err.code === 'PERMISSION_DENIED'
+    notify(err.code === 'PERMISSION_DENIED'
       ? '이 대상은 지금 채점할 수 없습니다. 운영자가 마감했거나 아직 열지 않았습니다.'
-      : '제출하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      : '제출하지 못했습니다. 잠시 후 다시 시도해 주세요.', '제출 실패');
   });
 }
+
+$('#dlgOk').onclick = () => dlgClose(true);
+$('#dlgCancel').onclick = () => dlgClose(null);
+$('#dlg').onclick = e => { if (e.target.id === 'dlg') dlgClose(null); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#dlg').classList.contains('hidden')) dlgClose(null); });
 
 showReg();
 </script>
