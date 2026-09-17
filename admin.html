@@ -395,6 +395,12 @@ function dialog(o){
 }
 function dlgClose(v){ $('#dlg').classList.add('hidden'); const r = dlgRes; dlgRes = null; if (r) r(v); }
 const notify  = (msg, title) => dialog({ title: title || '알림', msg, cancel: null });
+function failMsg(what, e){
+  const c = (e && (e.code || e.message)) || '알 수 없는 오류';
+  const perm = /permission|PERMISSION/i.test(String(c));
+  return what + '<br><span style="font-family:var(--mono);font-size:12px;color:var(--ink-3)">' + esc(String(c)) + '</span>' +
+    (perm ? '<br><br>보안 규칙이 최신이 아닐 수 있습니다. Firebase 콘솔 > Realtime Database > 규칙에 <b>database.rules.json</b> 을 다시 붙여넣고 게시해 주세요.' : '');
+}
 const ask     = (msg, o) => dialog(Object.assign({ title: '확인', msg }, o || {}));
 const askText = (msg, value, o) => dialog(Object.assign({ title: '입력', msg, input: { value: value || '', placeholder: (o||{}).placeholder || '' } }, o || {}));
 
@@ -514,17 +520,21 @@ $('#btnDup').onclick = async () => {
     return db.ref('sessions/' + nc).set(payload)
       .then(() => db.ref('sessionIndex/' + nc).set({ title: payload.config.title, createdAt: Date.now() }))
       .then(() => { openSession(nc); loadSessionList(); toast('복제했습니다'); });
-  }).catch(() => notify('복제하지 못했습니다.'));
+  }).catch(e => notify(failMsg('복제하지 못했습니다.', e), '복제 실패'));
 };
 $('#btnWipeScores').onclick = async () => {
   if (!await ask('이 세션의 제출 점수를 모두 지웁니다. 문항·대상·심사위원 명단은 그대로 둡니다.<br><br>리허설 후 실전 직전에 쓰는 기능입니다.', { title:'점수 초기화', ok:'초기화', danger:true })) return;
-  S.update({ scores: null, aggregate: null }).then(() => toast('점수를 초기화했습니다'));
+  S.update({ scores: null, aggregate: null })
+    .then(() => toast('점수를 초기화했습니다'))
+    .catch(e => notify(failMsg('초기화하지 못했습니다.', e), '초기화 실패'));
 };
 $('#btnWipeAll').onclick = async () => {
   if (!await ask('제출 점수와 심사위원 명단을 모두 지웁니다. 접속 중인 심사위원은 즉시 입장 화면으로 돌아갑니다.<br><br>문항과 평가 대상은 남습니다.', { title:'명단·점수 초기화', ok:'초기화', danger:true })) return;
   const u = { scores: null, aggregate: null, raters: null, roster: null, pass: null };
   Object.keys(D.raters || {}).forEach(rid => u['revoked/' + rid] = true);
-  S.update(u).then(() => toast('명단과 점수를 초기화했습니다'));
+  S.update(u)
+    .then(() => toast('명단과 점수를 초기화했습니다'))
+    .catch(e => notify(failMsg('초기화하지 못했습니다.', e), '초기화 실패'));
 };
 $('#btnDelSess').onclick = async () => {
   const a = await askText('세션 전체를 삭제합니다. 되돌릴 수 없습니다.<br>지우려면 아래에 세션 코드 <b>' + esc(CODE) + '</b> 를 그대로 입력하세요.', '', { title:'세션 삭제', ok:'삭제', danger:true, placeholder: CODE });
@@ -535,7 +545,7 @@ $('#btnDelSess').onclick = async () => {
     .then(() => db.ref('sessionIndex/' + CODE).remove())
     .then(() => (ACTIVE === CODE ? db.ref('activeSession').remove() : null))
     .then(after)
-    .catch(() => notify('삭제하지 못했습니다.'));
+    .catch(e => notify(failMsg('세션을 삭제하지 못했습니다.', e), '삭제 실패'));
 };
 
 function loadSessionList(){
@@ -728,7 +738,9 @@ $('#btnLockAll').onclick = async () => {
   if (!await ask('모든 대상을 마감하고, 마감된 대상의 수정 허용도 함께 끕니다. 결과 공개 직전에 쓰는 기능입니다.', { title:'전체 잠금', ok:'잠금' })) return;
   const u = { 'config/allowEditClosed': false };
   subList().forEach(([k]) => u['subjects/' + k + '/state'] = 'closed');
-  S.update(u).then(() => toast('전체 잠금 완료'));
+  S.update(u)
+    .then(() => toast('전체 잠금 완료'))
+    .catch(e => notify(failMsg('잠그지 못했습니다.', e), '실패'));
 };
 
 /* ── 제출 현황 ──────────────────────────────────────────── */
@@ -813,7 +825,7 @@ $('#mSave').onclick = () => {
   S.child('scores/' + EDIT.sid + '/' + EDIT.rid)
     .set({ v, total, at: EDIT.at, edited: true, editedAt: Date.now() })
     .then(() => { closeEdit(); toast('점수를 수정했습니다'); })
-    .catch(() => notify('저장하지 못했습니다.'));
+    .catch(e => notify(failMsg('저장하지 못했습니다.', e), '저장 실패'));
 };
 $('#mDel').onclick = async () => {
   if (!EDIT) return;
@@ -849,7 +861,7 @@ $('#btnPasteGo').onclick = () => {
     $('#pasteArea').value = '';
     $('#pasteMsg').textContent = ok + '명 등록' + (skip.length ? ' · 제외 ' + skip.length + '명: ' + skip.join(' / ') : '');
     toast(ok + '명을 등록했습니다');
-  }).catch(() => $('#pasteMsg').textContent = '등록하지 못했습니다.');
+  }).catch(e => { $('#pasteMsg').textContent = '등록하지 못했습니다. (' + ((e && e.code) || '오류') + ')'; });
 };
 
 function renderRaters(){
@@ -880,7 +892,8 @@ function renderRaters(){
     u['revoked/' + rid] = true;
     if (emp) u['pass/' + emp] = null;
     subList().forEach(([sid]) => u['scores/' + sid + '/' + rid] = null);
-    S.update(u).then(() => toast('삭제했습니다')).catch(() => toast('삭제하지 못했습니다'));
+    S.update(u).then(() => toast('삭제했습니다'))
+      .catch(e => notify(failMsg('삭제하지 못했습니다.', e), '삭제 실패'));
   });
 }
 
