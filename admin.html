@@ -226,6 +226,7 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
           <div class="row" style="margin-top:12px">
             <button id="btnAddCri" class="primary">문항 추가</button>
             <button id="btnPreset" class="ghost">기본 4문항 넣기</button>
+            <button id="btnCriFrom" class="ghost">지난 회차에서 가져오기</button>
           </div>
         </div>
       </section>
@@ -260,9 +261,18 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
       <section class="panel">
         <h2>심사위원 명단<span class="note" id="rosterNote"></span></h2>
         <div class="body">
+          <div class="row" style="margin-bottom:8px;gap:6px">
+            <input type="text" id="adName" placeholder="성명" style="width:92px">
+            <input type="text" id="adNo" placeholder="사번" style="width:118px;font-family:var(--mono)" inputmode="numeric">
+            <input type="text" id="adDept" placeholder="소속" style="width:136px">
+            <input type="text" id="adPos" placeholder="직위" style="width:104px">
+            <button id="btnAddOne" class="primary">추가</button>
+            <span id="addMsg" style="font-size:12.5px;color:var(--ink-2)"></span>
+          </div>
           <div class="row" style="margin-bottom:10px">
-            <button id="btnBulkPaste" class="primary">명단 붙여넣기로 등록</button>
-            <span style="color:var(--ink-3);font-size:12px">사전 등록해 두면 심사위원은 사번만 입력하고 들어옵니다</span>
+            <button id="btnBulkPaste" class="ghost">여러 명 붙여넣기</button>
+            <button id="btnRaterFrom" class="ghost">지난 회차에서 가져오기</button>
+            <span style="color:var(--ink-3);font-size:12px">칸에서 Enter 를 눌러도 추가됩니다. 소속·직위는 남아 있어 연달아 넣기 편합니다</span>
           </div>
           <div id="rosterWarn" class="banner warn hidden" style="margin-bottom:12px"></div>
           <div id="pasteBox" class="hidden" style="margin-bottom:14px">
@@ -334,7 +344,8 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
 <div id="dlg" class="modal hidden" style="z-index:60"><div class="mbox" style="max-width:420px">
   <h3 id="dlgTitle"></h3>
   <div class="mbody"><div id="dlgMsg"></div>
-    <input type="text" id="dlgInput" class="hidden" style="width:100%;margin-top:12px;font-family:var(--mono)"></div>
+    <input type="text" id="dlgInput" class="hidden" style="width:100%;margin-top:12px;font-family:var(--mono)">
+    <select id="dlgSelect" class="hidden" style="width:100%;margin-top:12px"></select></div>
   <div class="mfoot"><span style="margin-left:auto"></span>
     <button id="dlgCancel" class="ghost">취소</button>
     <button id="dlgOk" class="primary">확인</button></div>
@@ -362,7 +373,7 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
       싱가포르에서 만들었다면  https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app
    ═══════════════════════════════════════════════════════════════ */
 const DATABASE_URL = "https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app";
-const BUILD = "2026-09-17i";   /* 세 파일의 값이 같아야 최신입니다 */
+const BUILD = "2026-09-17j";   /* 세 파일의 값이 같아야 최신입니다 */
 
 const firebaseConfig = {
   apiKey: "AIzaSyCXGmsExbOCnvxDZpXcL1A10FlKeGZjjUI",
@@ -402,12 +413,18 @@ function dialog(o){
     const inp = $('#dlgInput');
     if (o.input) { inp.classList.remove('hidden'); inp.value = o.input.value || ''; inp.placeholder = o.input.placeholder || ''; }
     else inp.classList.add('hidden');
+    const sel = $('#dlgSelect');
+    if (o.select) {
+      sel.classList.remove('hidden');
+      sel.innerHTML = o.select.options.map(x => `<option value="${esc(x.value)}">${esc(x.label)}</option>`).join('');
+      if (o.select.value) sel.value = o.select.value;
+    } else sel.classList.add('hidden');
     const ok = $('#dlgOk');
     ok.textContent = o.ok || '확인';
     ok.className = o.danger ? 'danger' : 'primary';
     $('#dlgCancel').classList.toggle('hidden', o.cancel === null);
     $('#dlg').classList.remove('hidden');
-    setTimeout(() => (o.input ? inp : ok).focus(), 30);
+    setTimeout(() => (o.input ? inp : (o.select ? sel : ok)).focus(), 30);
   });
 }
 function dlgClose(v){ $('#dlg').classList.add('hidden'); const r = dlgRes; dlgRes = null; if (r) r(v); }
@@ -420,6 +437,7 @@ function failMsg(what, e){
 }
 const ask     = (msg, o) => dialog(Object.assign({ title: '확인', msg }, o || {}));
 const askText = (msg, value, o) => dialog(Object.assign({ title: '입력', msg, input: { value: value || '', placeholder: (o||{}).placeholder || '' } }, o || {}));
+const askPick = (msg, options, o) => dialog(Object.assign({ title: '선택', msg, select: { options } }, o || {}));
 
 function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),1800); }
 
@@ -747,6 +765,94 @@ async function legDrop(code){
     .catch(e => notify(failMsg('삭제하지 못했습니다.', e), '삭제 실패'));
 }
 
+/* ── 지난 회차에서 가져오기 ──
+   보관본과 예전 세션을 한 목록에 모아 고르게 합니다. */
+function sourceOptions(){
+  const opts = [];
+  arcList().forEach(([id,rec]) => {
+    const m = rec.meta || {};
+    opts.push({ value: 'a:' + id, label: '보관 · ' + (m.name || id) + ' (' + fmtWhen(m.savedAt) + ')' });
+  });
+  Object.entries(LEG || {}).forEach(([code,d]) => {
+    const t = ((d||{}).config||{}).title || '';
+    opts.push({ value: 's:' + code, label: '예전 세션 · ' + code + (t ? ' — ' + t : '') });
+  });
+  return opts;
+}
+function sourceData(value){
+  if (!value) return null;
+  const kind = value.slice(0,1), key = value.slice(2);
+  if (kind === 'a') { const r = (ARC||{})[key]; return r ? (r.data || {}) : null; }
+  if (kind === 's') return (LEG||{})[key] || null;
+  return null;
+}
+async function pickSource(msg, title){
+  const opts = sourceOptions();
+  if (!opts.length) { await notify('가져올 지난 회차가 없습니다. 회차를 보관하면 여기에 쌓입니다.'); return null; }
+  const v = await askPick(msg, opts, { title, ok: '가져오기' });
+  if (v === null) return null;
+  const data = sourceData(v);
+  if (!data) { await notify('그 회차를 읽지 못했습니다.'); return null; }
+  return data;
+}
+
+$('#btnCriFrom').onclick = async () => {
+  const data = await pickSource('평가 문항을 가져올 회차를 고르세요.<br>지금 문항은 <b>모두 교체됩니다.</b>', '문항 가져오기');
+  if (!data) return;
+  const cri = data.criteria || {};
+  const cnt = Object.keys(cri).length;
+  if (!cnt) { await notify('그 회차에는 평가 문항이 없습니다.'); return; }
+  const sub = submissionCount();
+  if (sub && !await ask('이미 제출된 점수가 <b>' + sub + '건</b> 있습니다. 문항을 교체하면 그 제출들은 집계에서 빠지고 재제출을 받아야 합니다.<br><br>계속할까요?',
+      { title: '주의', ok: '교체', danger: true })) return;
+  criSig = '';
+  S.child('criteria').set(cri)
+    .then(() => toast('문항 ' + cnt + '개를 가져왔습니다'))
+    .catch(e => notify(failMsg('가져오지 못했습니다.', e), '가져오기 실패'));
+};
+
+$('#btnRaterFrom').onclick = async () => {
+  const data = await pickSource('심사위원 명단을 가져올 회차를 고르세요.<br>지금 명단 <b>뒤에 이어 붙이고</b>, 사번이 겹치면 건너뜁니다.', '명단 가져오기');
+  if (!data) return;
+  const list = Object.values(data.raters || {});
+  if (!list.length) { await notify('그 회차에는 심사위원 명단이 없습니다.'); return; }
+  const exist = new Set(Object.values(D.raters || {}).map(r => empKey(r.empno)).filter(Boolean));
+  const u = {}; let ok = 0, skip = 0;
+  list.forEach(v => {
+    if (!v || !v.name) { skip++; return; }
+    const k = empKey(v.empno);
+    if (k && exist.has(k)) { skip++; return; }
+    if (k) exist.add(k);
+    const rid = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+    u['raters/' + rid] = { name: v.name, empno: k, dept: v.dept || '', position: v.position || '', at: Date.now() };
+    ok++;
+  });
+  if (!ok) { await notify('가져올 사람이 없습니다. 이미 모두 명단에 있습니다.'); return; }
+  S.update(u)
+    .then(() => toast(ok + '명을 가져왔습니다' + (skip ? ' (중복 ' + skip + '명 제외)' : '')))
+    .catch(e => notify(failMsg('가져오지 못했습니다.', e), '가져오기 실패'));
+};
+
+/* ── 한 명씩 입력해 등록 ── */
+function addOne(){
+  const name = $('#adName').value.trim();
+  const emp = empKey($('#adNo').value);
+  const msg = $('#addMsg');
+  if (!name) { msg.style.color = 'var(--stop)'; msg.textContent = '성명을 입력하세요.'; $('#adName').focus(); return; }
+  if (emp && Object.values(D.raters || {}).some(v => empKey(v.empno) === emp)) {
+    msg.style.color = 'var(--stop)'; msg.textContent = '이미 있는 사번입니다.'; $('#adNo').focus(); return;
+  }
+  const rid = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+  S.child('raters/' + rid).set({
+    name, empno: emp, dept: $('#adDept').value.trim(), position: $('#adPos').value.trim(), at: Date.now()
+  }).then(() => {
+    msg.style.color = 'var(--go)';
+    msg.textContent = name + ' 추가' + (emp ? '' : ' · 사번이 없어 사번 입장은 불가');
+    $('#adName').value = ''; $('#adNo').value = '';   /* 소속·직위는 남겨 연속 입력 */
+    $('#adName').focus();
+  }).catch(e => { msg.style.color = 'var(--stop)'; msg.textContent = '추가하지 못했습니다. (' + ((e && e.code) || '오류') + ')'; });
+}
+
 function downloadCsv(rows, filename){
   const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
   const a = document.createElement('a');
@@ -755,7 +861,10 @@ function downloadCsv(rows, filename){
 }
 
 /* ── 탭 ─────────────────────────────────────────────────── */
-$('#dlgOk').onclick = () => dlgClose($('#dlgInput').classList.contains('hidden') ? true : $('#dlgInput').value);
+$('#dlgOk').onclick = () => {
+  if (!$('#dlgSelect').classList.contains('hidden')) return dlgClose($('#dlgSelect').value);
+  dlgClose($('#dlgInput').classList.contains('hidden') ? true : $('#dlgInput').value);
+};
 $('#dlgCancel').onclick = () => dlgClose(null);
 $('#dlg').onclick = e => { if (e.target.id === 'dlg') dlgClose(null); };
 $('#dlgInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#dlgOk').click(); });
@@ -1053,6 +1162,9 @@ $('#mDel').onclick = async () => {
 /* ── 명단 사전 등록 ─────────────────────────────────────
    사번을 키로 pass/{사번} 에 입장 정보를 둡니다. 정확한 사번을 알아야
    그 한 칸만 읽히고, 명단 전체 조회는 규칙으로 막혀 있습니다. */
+$('#btnAddOne').onclick = addOne;
+['adName','adNo','adDept','adPos'].forEach(id =>
+  $('#' + id).addEventListener('keydown', e => { if (e.key === 'Enter') addOne(); }));
 $('#btnBulkPaste').onclick = () => { $('#pasteBox').classList.toggle('hidden'); $('#pasteMsg').textContent = ''; $('#pasteArea').focus(); };
 $('#btnPasteCancel').onclick = () => $('#pasteBox').classList.add('hidden');
 $('#btnPasteGo').onclick = () => {
