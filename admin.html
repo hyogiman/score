@@ -148,6 +148,32 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
     </div>
   </section>
 
+  <!-- 로그인은 됐지만 관리자 목록에 없는 계정 -->
+  <section id="noAdmin" class="panel hidden">
+    <h2>관리자 권한이 없는 계정입니다</h2>
+    <div class="body">
+      <p class="hint">로그인은 되었지만 이 계정은 관리자 목록(<b>admins</b>)에 없습니다. 아래 UID를 관리자 목록에 넣으면 이 화면이 저절로 넘어갑니다. 새로고침할 필요 없습니다.</p>
+      <div class="row" style="margin-bottom:14px">
+        <span style="color:var(--ink-2);flex:none">이 계정의 UID</span>
+        <span class="linkbox" id="myUid" style="flex:1;min-width:220px;font-size:13px"></span>
+        <button id="btnCopyUid" class="primary">복사</button>
+      </div>
+      <div id="bootFirst">
+        <div style="font-weight:600;margin-bottom:6px">이미 관리자가 있다면</div>
+        <p class="hint" style="margin-bottom:14px">UID를 복사해 기존 관리자에게 보내세요. 기존 관리자가 admin 화면 <b>설정 탭 → 관리자 계정</b>에서 붙여넣고 추가하면 됩니다.</p>
+        <div style="font-weight:600;margin-bottom:6px">첫 관리자라면 — Firebase 콘솔에서 한 번만</div>
+        <ol style="margin:0;padding-left:20px;line-height:1.9;font-size:13px;color:var(--ink-2)">
+          <li>Firebase 콘솔 → 빌드 → <b>Realtime Database</b> → <b>데이터</b> 탭</li>
+          <li>맨 위 데이터베이스 주소가 적힌 줄(루트)에 마우스를 올리면 나오는 <b>＋</b> 클릭</li>
+          <li>이름 칸에 <code>admins</code> 입력, 값은 비워 둔 채 입력 줄 오른쪽의 <b>＋</b>를 한 번 더 눌러 하위 항목 추가</li>
+          <li>하위 항목의 이름 칸에 <b>위 UID 붙여넣기</b>, 값 칸에 <code>true</code></li>
+          <li><b>추가</b> 클릭 — 이 화면이 곧바로 운영 화면으로 바뀝니다</li>
+        </ol>
+        <p class="hint" style="margin-top:12px">이미 <code>admins</code> 항목이 있으면 그 줄의 ＋를 눌러 UID만 하위 항목으로 넣으면 됩니다.</p>
+      </div>
+    </div>
+  </section>
+
   <div id="main" class="hidden">
     <!-- 회차 -->
     <section class="panel">
@@ -212,6 +238,17 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
             <span class="num" id="raterN" style="font-size:15px">—</span>
             <span style="color:var(--ink-2);font-size:12px">공개 화면의 진행률 분모는 <b>실제 입장한 사람</b> 기준입니다. 사전 등록만 하고 오지 않은 사람은 분모에 들어가지 않습니다.</span>
           </div></div>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>관리자 계정<span class="note" id="admNote"></span></h2>
+        <div class="body">
+          <p class="hint">이 목록에 있는 계정만 운영 화면을 쓸 수 있습니다. 새 관리자는 먼저 Authentication에서 계정을 만들고, 그 계정으로 이 화면에 로그인하면 UID가 표시됩니다. 그 UID를 받아 아래에 넣으세요.</p>
+          <table id="admTable"><tbody></tbody></table>
+          <div class="row" style="margin-top:10px">
+            <input type="text" id="admUid" placeholder="추가할 계정의 UID" style="flex:1;min-width:240px;font-family:var(--mono)">
+            <button id="btnAdmAdd" class="primary">관리자 추가</button>
+          </div>
         </div>
       </section>
     </div>
@@ -373,7 +410,7 @@ textarea{font:inherit;border:1px solid var(--line);padding:8px;border-radius:2px
       싱가포르에서 만들었다면  https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app
    ═══════════════════════════════════════════════════════════════ */
 const DATABASE_URL = "https://score-ee66c-default-rtdb.asia-southeast1.firebasedatabase.app";
-const BUILD = "2026-09-17j";   /* 세 파일의 값이 같아야 최신입니다 */
+const BUILD = "2026-09-21a";   /* 세 파일의 값이 같아야 최신입니다 */
 
 const firebaseConfig = {
   apiKey: "AIzaSyCXGmsExbOCnvxDZpXcL1A10FlKeGZjjUI",
@@ -472,15 +509,51 @@ $('#btnIn').onclick = () => {
 $('#pw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnIn').click(); });
 $('#btnOut').onclick = () => auth.signOut();
 
+/* ── 로그인 → 관리자 목록(admins/{UID}) 확인 → 진입 ──
+   로그인만으로는 아무것도 못 읽습니다. 목록에 있어야 운영 화면이 열립니다.
+   자기 항목은 실시간으로 지켜보므로, 콘솔에서 추가하면 새로고침 없이 넘어갑니다. */
+let myAdminRef = null, myAdminCb = null, ME_UID = null;
+function showPanels(state){
+  $('#loginPanel').classList.toggle('hidden', state !== 'login');
+  $('#noAdmin').classList.toggle('hidden', state !== 'noadmin');
+  $('#main').classList.toggle('hidden', state !== 'main');
+}
 auth.onAuthStateChanged(u => {
-  authed = !!u;
-  $('#loginPanel').classList.toggle('hidden', authed);
-  $('#main').classList.toggle('hidden', !authed);
-  $('#btnOut').classList.toggle('hidden', !authed);
+  detach();
+  authed = false;
+  if (myAdminRef) { myAdminRef.off('value', myAdminCb); myAdminRef = null; }
+  $('#btnOut').classList.toggle('hidden', !u);
   $('#who').textContent = u ? u.email : '';
-  if (authed) attach();
-  else detach();
+  ME_UID = u ? u.uid : null;
+  if (!u) { showPanels('login'); return; }
+  $('#myUid').textContent = u.uid;
+  myAdminRef = db.ref('admins/' + u.uid);
+  myAdminCb = myAdminRef.on('value', sn => {
+    if (sn.exists()) {
+      if (!authed) {
+        authed = true;
+        showPanels('main');
+        const v = sn.val();
+        if (v === true || !v || !v.email) myAdminRef.set({ email: u.email || '', at: Date.now() }).catch(()=>{});
+        attach();
+      }
+    } else {
+      authed = false;
+      detach();
+      showPanels('noadmin');
+    }
+  }, () => { authed = false; detach(); showPanels('noadmin'); });
 });
+$('#btnCopyUid').onclick = () => {
+  const t = $('#myUid').textContent;
+  (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject())
+    .then(() => toast('UID를 복사했습니다'))
+    .catch(() => {
+      const r = document.createRange(); r.selectNodeContents($('#myUid'));
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      toast('선택되었습니다. 길게 눌러 복사하세요');
+    });
+};
 
 /* ── 세션 열기 ──────────────────────────────────────────── */
 function detach(){ refs.forEach(([r,ev,cb]) => r.off(ev,cb)); refs = []; }
@@ -507,9 +580,45 @@ function attach(){
   bind('scores',   () => { renderCriteria(); renderMatrix(); renderRaters(); renderResults(); schedule(); });
   bind('screen',   () => renderScreenCtl());
 
-  db.ref('archive').on('value', snap => { ARC = snap.val() || {}; renderArchive(); });
+  const ar = db.ref('archive');
+  refs.push([ar, 'value', ar.on('value', snap => { ARC = snap.val() || {}; renderArchive(); })]);
+  const ad = db.ref('admins');
+  refs.push([ad, 'value', ad.on('value', snap => { ADMINS = snap.val() || {}; renderAdmins(); })]);
   loadLegacy();
 }
+
+/* ── 관리자 계정 관리 ── */
+let ADMINS = {};
+function renderAdmins(){
+  const list = Object.entries(ADMINS || {}).sort((a,b) => num((a[1]||{}).at) - num((b[1]||{}).at));
+  $('#admNote').textContent = list.length + '명';
+  const tb = $('#admTable').querySelector('tbody');
+  tb.innerHTML = '<tr><th>계정</th><th>UID</th><th style="width:120px">추가 시각</th><th style="width:70px"></th></tr>' +
+    list.map(([uid, v]) => {
+      const email = (v && v.email) || (uid === ME_UID ? (auth.currentUser||{}).email : '') || '아직 로그인 전';
+      const me = uid === ME_UID;
+      return `<tr data-uid="${esc(uid)}"><td>${esc(email)}${me ? ' <span class="pill go">나</span>' : ''}</td>
+        <td class="n" style="font-size:11.5px;word-break:break-all">${esc(uid)}</td>
+        <td class="n">${v && v.at ? fmtWhen(v.at) : '—'}</td>
+        <td>${me ? '' : '<button class="danger" data-rm="1">제외</button>'}</td></tr>`;
+    }).join('');
+  tb.querySelectorAll('button[data-rm]').forEach(b => b.onclick = async e => {
+    const uid = e.target.closest('tr').dataset.uid;
+    if (!await ask('이 계정을 관리자 목록에서 뺍니다. 그 계정은 즉시 운영 화면을 쓸 수 없게 됩니다.<br>Authentication의 계정 자체는 지워지지 않습니다.',
+        { title: '관리자 제외', ok: '제외', danger: true })) return;
+    db.ref('admins/' + uid).remove().then(() => toast('제외했습니다'))
+      .catch(err => notify(failMsg('제외하지 못했습니다.', err), '실패'));
+  });
+}
+$('#btnAdmAdd').onclick = async () => {
+  const uid = $('#admUid').value.trim();
+  if (!uid) { await notify('추가할 계정의 UID를 넣어 주세요.'); return; }
+  if (/[.#$\[\]\/\s]/.test(uid) || uid.length < 10) { await notify('UID 형식이 아닙니다. 그 계정으로 admin 화면에 로그인하면 표시되는 값을 그대로 붙여넣어 주세요.'); return; }
+  if ((ADMINS || {})[uid]) { await notify('이미 관리자인 계정입니다.'); return; }
+  db.ref('admins/' + uid).set({ email: '', at: Date.now(), by: (auth.currentUser||{}).email || '' })
+    .then(() => { $('#admUid').value = ''; toast('관리자로 추가했습니다'); })
+    .catch(err => notify(failMsg('추가하지 못했습니다.', err), '실패'));
+};
 
 /* ── 회차 이름 ── */
 function saveName(){
@@ -936,7 +1045,9 @@ function syncRoster(){
 }
 
 /* ── 평가 문항 ──────────────────────────────────────────── */
-const sig = o => Object.keys(o||{}).sort().join(',');
+/* 앞에 # 를 붙입니다. 항목이 0개여도 '#' 이 되어, 강제 갱신 표시값('')과 절대 같아지지 않습니다.
+   이게 없으면 마지막 항목을 지울 때 화면이 갱신되지 않습니다. */
+const sig = o => '#' + Object.keys(o||{}).sort().join(',');
 let criSig = '';
 function criList(){ return Object.entries(D.criteria||{}).sort((a,b)=>num(a[1].order)-num(b[1].order)); }
 function submissionCount(){
@@ -970,7 +1081,10 @@ function renderCriteria(){
   tb.querySelectorAll('button[data-del]').forEach(b => b.onclick = async e => {
     const k = e.target.closest('tr').dataset.k;
     if (!await ask('이 문항을 삭제합니다. 이미 입력된 해당 문항 점수는 집계에서 빠집니다.', { title:'문항 삭제', ok:'삭제', danger:true })) return;
-    criSig = ''; S.child('criteria/' + k).remove();
+    criSig = '';
+    S.child('criteria/' + k).remove()
+      .then(() => toast('삭제했습니다'))
+      .catch(e => notify(failMsg('삭제하지 못했습니다.', e), '삭제 실패'));
   });
 }
 $('#btnAddCri').onclick = () => {
@@ -1025,10 +1139,9 @@ function renderSubjects(){
       const k = e.target.closest('tr').dataset.k;
       if (!await ask('이 대상과 해당 점수를 모두 삭제합니다.', { title:'대상 삭제', ok:'삭제', danger:true })) return;
       subSig = '';
-      S.child('subjects/' + k).remove();
-      S.child('scores/' + k).remove();
-      S.child('progress/' + k).remove();
-      S.child('aggregate/' + k).remove();
+      S.update({ ['subjects/' + k]: null, ['scores/' + k]: null, ['progress/' + k]: null, ['aggregate/' + k]: null })
+        .then(() => toast('삭제했습니다'))
+        .catch(e => notify(failMsg('삭제하지 못했습니다.', e), '삭제 실패'));
     });
   } else {
     subList().forEach(([k,v]) => {
